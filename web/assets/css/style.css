@@ -1,0 +1,352 @@
+/* 自定義樣式 */
+:root {
+    --primary-color: #0d6efd;
+    --secondary-color: #6c757d;
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #0dcaf0;
+
+    /* layout tokens */
+    --sidebar-width: 260px;
+    --breakpoint-md: 768px;
+    --gutter: 1rem;
+}
+
+body {
+    font-family: 'Microsoft JhengHei', 'PingFang TC', 'Helvetica Neue', Arial, sans-serif;
+    min-height: 100vh;
+    /* allow page to scroll naturally on small devices so fixed/overflowed elements behave correctly */
+    overflow: auto;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+}
+
+.sidebar {
+    position: sticky;
+    top: 0;
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    height: 100vh;
+    overflow-y: auto;
+    transition: left 0.3s, transform 0.3s;
+}
+
+.nav-btn {
+    border: none;
+    background: transparent;
+    color: #6c757d;
+    padding: 0.75rem 1rem;
+    transition: all 0.2s;
+}
+
+.nav-btn:hover {
+    background-color: #f8f9fa;
+    color: var(--primary-color);
+}
+
+.nav-btn.active {
+    background-color: #e7f1ff;
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+/* 課表樣式 */
+.schedule-container {
+    overflow-x: auto;
+}
+
+.schedule-table {
+    width: 100%;
+    min-width: 800px;
+    border-collapse: separate;
+    border-spacing: 2px;
+    table-layout: fixed; /* 固定欄寬，避免內容寬度導致欄位不一致 */
+}
+
+.schedule-table thead th:first-child { width: 80px; }
+.schedule-table thead th:not(:first-child) { width: calc((100% - 80px) / 7); }
+
+.schedule-cell .course-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+.schedule-table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    text-align: center;
+    padding: 0.75rem;
+    border: 1px solid #dee2e6;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.schedule-table tbody td {
+    padding: 0.25rem;
+    border: 1px solid #dee2e6;
+    vertical-align: middle;
+    min-height: 60px;
+    position: relative;
+}
+
+.schedule-table tbody td.time-cell {
+    background-color: #f8f9fa;
+    font-weight: 500;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #6c757d;
+    width: 80px;
+    vertical-align: middle !important; 
+}
+
+.schedule-cell {
+    background-color: #e7f1ff;
+    border: 1px solid #b3d4fc;
+    border-radius: 4px;
+    padding: 0.5rem;
+    margin: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+    position: relative;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.schedule-cell:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 5;
+}
+
+.schedule-cell.course-required {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+}
+
+.schedule-cell.course-elective {
+    background-color: #d1e7dd;
+    border-color: #198754;
+}
+
+.schedule-cell.course-general {
+    background-color: #cfe2ff;
+    border-color: #0d6efd;
+}
+
+.schedule-cell.course-language {
+    background-color: #f8d7da;
+    border-color: #dc3545;
+}
+
+.schedule-cell .course-name {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: #212529;
+}
+
+.schedule-cell .course-info {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.schedule-cell .course-teacher {
+    font-size: 0.75rem;
+    color: #495057;
+}
+
+/* 課程卡片 */
+.course-card {
+    transition: all 0.3s;
+    border: 1px solid #dee2e6;
+}
+
+.course-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.course-card .badge {
+    font-size: 0.7rem;
+}
+
+
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: calc(-1 * var(--sidebar-width));
+        transition: left 0.3s;
+        z-index: 1000;
+    }
+    
+    .sidebar.show {
+        left: 0;
+    }
+
+    /* backdrop for mobile sidebar */
+    .sidebar-backdrop {
+        display: none;
+    }
+    .sidebar-backdrop.show {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.45);
+        z-index: 900;
+    }
+    
+    .schedule-table {
+        font-size: 0.75rem;
+    }
+    
+    .schedule-cell {
+        padding: 0.25rem;
+        font-size: 0.7rem;
+    }
+
+    /* By default on small screens show card view unless user forces table */
+    #tab-schedule[data-view="auto"] .schedule-table { display: none; }
+    #tab-schedule[data-view="auto"] #schedule-cards { display: block; }
+
+    #tab-schedule[data-view="cards"] .schedule-table { display: none; }
+    #tab-schedule[data-view="cards"] #schedule-cards { display: block; }
+
+    #tab-schedule[data-view="table"] .schedule-table { display: block; }
+    #tab-schedule[data-view="table"] #schedule-cards { display: none; }
+}
+
+/* Schedule cards styling */
+.schedule-cards { display: none; }
+.schedule-cards .day-group { margin-bottom: 1rem; }
+.schedule-cards .day-header { font-weight: 700; color: var(--secondary-color); margin-bottom: 0.5rem; }
+.schedule-cards .course-card { margin-bottom: 0.5rem; }
+.schedule-cards .course-card .card-body { padding: 0.75rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+.schedule-cards .course-meta { font-size: 0.85rem; color: #6c757d; }
+.schedule-cards .course-time { font-weight: 600; }
+
+@media (max-width: 420px) {
+    .schedule-cards .course-card .card-body { flex-direction: column; align-items: stretch; }
+    .schedule-cards .course-card .card-body .d-flex { flex-direction: row; gap: 0.5rem; }
+    .schedule-cards .course-card .card-body .d-flex button { flex: 1 1 auto; }
+}
+
+@media (max-width: 380px) {
+    .course-card h6, .schedule-cards .fw-bold { font-size: 0.95rem; }
+    .schedule-cards .course-meta, .schedule-cards .course-time { font-size: 0.84rem; }
+    .btn-sm { padding: .28rem .5rem; font-size: .78rem; }
+    #schedule-cards { padding-left: .5rem; padding-right: .5rem; }
+}
+
+@media (max-width: 375px) {
+    .schedule-table { min-width: 520px; }
+} 
+/* Allow forcing cards/table view on any width */
+#tab-schedule[data-view="cards"] .schedule-table { display: none !important; }
+#tab-schedule[data-view="cards"] #schedule-cards { display: block !important; }
+#tab-schedule[data-view="table"] .schedule-table { display: table !important; }
+#tab-schedule[data-view="table"] #schedule-cards { display: none !important; }
+@media (max-width: 480px) {
+    .schedule-table {
+        min-width: 560px;
+    }
+}
+
+/* 動畫效果 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Helpers */
+@media (min-width: 769px) {
+    /* ensure mobile-only backdrop and controls are not shown on desktop */
+    .sidebar-backdrop { display: none !important; }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+/* 滾動條樣式 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* 空堂提示 */
+.empty-slot {
+    background-color: #f8f9fa;
+    min-height: 60px;
+    border: 1px dashed #dee2e6;
+}
+
+.empty-slot:hover {
+    background-color: #e9ecef;
+    border-color: var(--primary-color);
+}
+
+/* 載入動畫 */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(0,0,0,0.1);
+    border-radius: 50%;
+    border-top-color: var(--primary-color);
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Modal improvements for small screens */
+@media (max-width: 576px) {
+    .modal-dialog {
+        max-width: calc(100% - 2rem);
+        margin: 1.25rem;
+    }
+}
+
+.modal-body {
+    max-height: 60vh;
+    overflow-y: auto; 
+}
+
+/* Ensure main content is full width on small screens */
+@media (max-width: 768px) {
+    main {
+        width: 100%;
+        min-height: 100vh;
+    }
+}
+
+/* History Card Hover Effect */
+.hover-shadow:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
+}
+.transition-all {
+    transition: all 0.3s ease;
+}
