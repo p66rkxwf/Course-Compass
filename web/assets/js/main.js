@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', initializeApp);
 
 async function initializeApp() {
     ui.initializeScheduleTable();
+    initSettings(); 
     await loadCoursesData();
     populateCollegeSelect();
     initSystemAndLevelSelects();
@@ -51,7 +52,74 @@ async function initializeApp() {
 
     window.addEventListener('resize', debounce(detectAndApplyScheduleView, 200));
     detectAndApplyScheduleView();
-    ['select-year', 'select-semester', 'select-college', 'select-grade', 'select-grade-schedule', 'select-class-schedule'].forEach(id => initSelect2(id));
+    ['select-year', 'select-semester', 'select-college', 'select-grade', 'select-grade-schedule', 'select-class-schedule', 'select-department-schedule'].forEach(id => initSelect2(id));
+}
+
+// 設定功能邏輯：主題、視圖、重置
+function initSettings() {
+    // 1. 初始化主題
+    const savedTheme = localStorage.getItem('appTheme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    
+    // 更新 Radio 按鈕狀態
+    const themeRadio = document.getElementById(`theme-${savedTheme}`);
+    if (themeRadio) themeRadio.checked = true;
+
+    // 監聽主題切換
+    document.querySelectorAll('input[name="theme-options"]').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const newTheme = e.target.value;
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('appTheme', newTheme);
+            
+            document.querySelectorAll('select').forEach(el => {
+                if (jQuery(el).hasClass("select2-hidden-accessible")) {
+                    const instance = jQuery(el).data('select2');
+                    if(instance) {
+                         jQuery(el).trigger('change.select2'); 
+                    }
+                }
+            });
+            const label = newTheme === 'dark' ? '深色模式' : '亮色模式';
+            ui.showAlert(`已切換為${label}`, 'success');
+        });
+    });
+
+    // 2. 初始化視圖
+    const savedView = localStorage.getItem('scheduleViewPref') || 'table';
+    const viewRadio = document.getElementById(`view-${savedView === 'auto' ? 'table' : savedView}`);
+    if (viewRadio) viewRadio.checked = true;
+
+    // 監聽視圖切換
+    document.querySelectorAll('input[name="view-options"]').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const newView = e.target.value;
+            if (window.toggleScheduleView) {
+                window.toggleScheduleView(newView);
+            }
+        });
+    });
+
+    // 3. 重置功能
+    const resetBtn = document.getElementById('btn-reset-app');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            Swal.fire({
+                title: '確定要重置嗎？',
+                text: "這將清除所有已選課程、設定與暫存資料，回到初始狀態。",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '確定重置',
+                confirmButtonColor: '#dc3545',
+                cancelButtonText: '取消'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    localStorage.clear();
+                    location.reload(); // 重新整理頁面
+                }
+            });
+        });
+    }
 }
 
 function cleanupSelectedCourses() {
@@ -953,25 +1021,12 @@ function exposeGlobalFunctions() {
 
         if (mode === 'auto') localStorage.removeItem('scheduleViewPref');
         else localStorage.setItem('scheduleViewPref', mode);
-
-        const btnTable = document.getElementById('view-table-btn');
-        const btnCards = document.getElementById('view-cards-btn');
-        if (btnTable && btnCards) {
-            if (mode === 'table') {
-                btnTable.classList.add('active'); btnTable.setAttribute('aria-pressed','true');
-                btnCards.classList.remove('active'); btnCards.setAttribute('aria-pressed','false');
-            } else if (mode === 'cards') {
-                btnCards.classList.add('active'); btnCards.setAttribute('aria-pressed','true');
-                btnTable.classList.remove('active'); btnTable.setAttribute('aria-pressed','false');
-            } else {
-                btnTable.classList.remove('active'); btnTable.setAttribute('aria-pressed','false');
-                btnCards.classList.remove('active'); btnCards.setAttribute('aria-pressed','false');
-            }
-        }
+        
         ui.updateScheduleDisplay();
-        if (mode === 'table') ui.showAlert('已切換為表格檢視', 'info');
-        else if (mode === 'cards') ui.showAlert('已切換為卡片檢視', 'info');
-    }; 
+        
+        if (mode === 'table') ui.showAlert('已切換為表格檢視', 'success');
+        else if (mode === 'cards') ui.showAlert('已切換為卡片檢視', 'success');
+    };
     
     window.removeCourse = (code, serial) => {
         const sCode = String(code);
