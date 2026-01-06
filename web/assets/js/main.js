@@ -7,6 +7,27 @@ import * as ui from './ui.js';
 let historyGroupsCache = [];
 let historyChartInstance = null;
 
+function initSelect2(id) {
+    if (typeof jQuery === 'undefined' || !jQuery.fn.select2) return;
+    
+    const $el = jQuery(`#${id}`);
+    if ($el.length === 0) return;
+
+    if ($el.hasClass("select2-hidden-accessible")) {
+        $el.select2('destroy');
+    }
+
+    $el.select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: $el.find('option:first').text(),
+        allowClear: false,
+        language: {
+            noResults: () => "沒有找到相關選項"
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 async function initializeApp() {
@@ -30,6 +51,7 @@ async function initializeApp() {
 
     window.addEventListener('resize', debounce(detectAndApplyScheduleView, 200));
     detectAndApplyScheduleView();
+    ['select-year', 'select-semester', 'select-college', 'select-grade', 'select-grade-schedule', 'select-class-schedule'].forEach(id => initSelect2(id));
 }
 
 function cleanupSelectedCourses() {
@@ -67,13 +89,17 @@ async function loadCoursesData() {
 }
 
 function getCourseSystem(course) {
-    if (course.學制) return course.學制;
+    const sys = course['學制(日/夜)'] || course.學制;
+    if (sys) return sys;
+    
     const className = course['開課班別(代表)'] || course.班級 || '';
     return className.includes('夜') ? '夜間部' : '日間部';
 }
 
 function getCourseLevel(course) {
-    if (course.部別) return course.部別;
+    const lvl = course['部別(大學/碩士/博士)'] || course.部別;
+    if (lvl) return lvl;
+
     const className = course['開課班別(代表)'] || course.班級 || '';
     const grade = String(course.年級 || '');
     if (className.includes('博') || grade.includes('博')) return '博士班';
@@ -90,6 +116,7 @@ function populateCollegeSelect() {
     select.innerHTML = '<option value="">選擇學院</option>';
     Array.from(colleges).sort().forEach(c => select.add(new Option(c, c)));
     if (current && colleges.has(current)) select.value = current;
+    initSelect2('select-college-schedule');
 }
 
 function initSystemAndLevelSelects() {
@@ -114,6 +141,8 @@ function initSystemAndLevelSelects() {
     }).forEach(l => lvlSelect.add(new Option(l, l)));
     if (curSys && systems.has(curSys)) sysSelect.value = curSys;
     if (curLvl && levels.has(curLvl)) lvlSelect.value = curLvl;
+    initSelect2('select-system-schedule');
+    initSelect2('select-level-schedule');
 }
 
 async function loadDepartments() {
@@ -127,6 +156,7 @@ async function loadDepartments() {
                 select.add(new Option(dept, dept));
             });
         }
+        initSelect2('select-dept-recommend');
     } catch (error) {
         console.error('載入系所列表失敗:', error);
     }
@@ -136,17 +166,23 @@ async function loadDepartmentsByCollege(college, targetSelectId) {
     try {
         if (state.allCoursesData.length === 0) await loadCoursesData();
         const departments = new Set();
+        
         state.allCoursesData.forEach(course => {
-            if (course.學院 === college && course.科系) {
+            const cCollege = (course.學院 || '').trim();
+            const target = (college || '').trim();
+            
+            if ((target === "" || cCollege === target) && course.科系) {
                 departments.add(course.科系);
             }
         });
+
         const select = document.getElementById(targetSelectId);
         if (select) {
             select.innerHTML = '<option value="">選擇科系</option>';
             Array.from(departments).sort().forEach(dept => {
                 select.add(new Option(dept, dept));
             });
+            initSelect2(targetSelectId);
         }
     } catch (error) {
         console.error('載入科系列表失敗:', error);
@@ -156,59 +192,118 @@ async function loadDepartmentsByCollege(college, targetSelectId) {
 function updateGradeList(college, department, system, level) {
     const select = document.getElementById('select-grade-schedule');
     select.innerHTML = '<option value="">選擇年級</option>';
+    
     const grades = new Set();
+    const zhToNum = { '一': '1', '二': '2', '三': '3', '四': '4', '五': '5', '六': '6', '七': '7' };
+    
     state.allCoursesData.forEach(course => {
-        const matchCollege = course.學院 === college;
-        const matchDept = course.科系 === department;
-        const matchSys = system === "" || getCourseSystem(course) === system;
-        const matchLvl = level === "" || getCourseLevel(course) === level;
-        if (matchCollege && matchDept && matchSys && matchLvl && course.年級) {
-            grades.add(String(course.年級));
+        const cCollege = (course.學院 || '').trim();
+        const cDept = (course.科系 || '').trim();
+        const cSys = getCourseSystem(course); 
+        const cLvl = getCourseLevel(course);
+
+        // 寬鬆比對
+        const matchCollege = !college || !cCollege || cCollege === college;
+        const matchDept = !department || !cDept || cDept === department;
+        const matchSys = !system || cSys === system;
+        const matchLvl = !level || cLvl === level;
+
+        if (matchCollege && matchDept && matchSys && matchLvl) {
+            let g = String(course.年級 || '').trim();
+            
+            if (!g || g === '碩士' || g === '博士' || g === '0') {
+                const className = course['開課班別(代表)'] || '';
+                for (const [zh, num] of Object.entries(zhToNum)) {
+                    if (className.includes(zh)) {
+                        g = num;
+                        break;
+                    }
+                }
+                if (!g || g === '碩士' || g === '博士') {
+                     g = '不分年級';
+                }
+            }
+            grades.add(g);
         }
     });
+
+    const numMap = { '1': '一', '2': '二', '3': '三', '4': '四', '5': '五', '6': '六', '7': '七' };
+
     Array.from(grades).sort((a, b) => {
+        if (a === '不分年級') return -1;
+        if (b === '不分年級') return 1;
         const numA = parseInt(a.match(/\d+/)?.[0] || 0);
         const numB = parseInt(b.match(/\d+/)?.[0] || 0);
-        if (numA !== numB) return numA - numB;
-        return a.localeCompare(b);
+        return numA - numB;
     }).forEach(g => {
         let label = g;
-        if (/^\d+$/.test(g)) label = `${g}年級`;
-        else if (g.includes('碩')) label = g.replace(/(\d+)/, '士$1年級').replace('碩士', '碩士');
-        else if (g.includes('博')) label = g.replace(/(\d+)/, '士$1年級').replace('博士', '博士');
+        if (g !== '不分年級') {
+            const num = g.match(/\d+/)?.[0] || g;
+            const zh = numMap[num] || num;
+
+            if (/^\d+$/.test(g)) {
+                if (level === '碩士班') label = `碩${zh}`;
+                else if (level === '博士班') label = `博${zh}`;
+                else label = `${zh}年級`;
+            }
+        }
         select.add(new Option(label, g));
     });
+    
+    initSelect2('select-grade-schedule');
 }
 
 function updateClassList(college, department, system, level, grade) {
     const select = document.getElementById('select-class-schedule');
     select.innerHTML = '<option value="">選擇班級</option>';
     const classMap = new Map();
+    const zhToNum = { '一': '1', '二': '2', '三': '3', '四': '4', '五': '5', '六': '6', '七': '7' };
+    
     state.allCoursesData.forEach(course => {
-        const matchCollege = course.學院 === college;
-        const matchDept = course.科系 === department;
-        const matchGrade = String(course.年級) === String(grade);
-        const matchSys = system === "" || getCourseSystem(course) === system;
-        const matchLvl = level === "" || getCourseLevel(course) === level;
-        if (matchCollege && matchDept && matchGrade && matchSys && matchLvl) {
-            let className = course.班級;
-            if (!className && course['開課班別(代表)']) {
-                 const m = course['開課班別(代表)'].match(/(\d+年級[AB]?班?)/);
-                 if (m) className = m[1];
-            }
-            if (className) {
-                const realSystem = getCourseSystem(course);
-                const realLevel = getCourseLevel(course);
-                const key = `${realSystem}|${realLevel}|${className}`;
-                if (!classMap.has(key)) {
-                    classMap.set(key, { name: className, value: key });
+        const cCollege = (course.學院 || '').trim();
+        const cDept = (course.科系 || '').trim();
+        const cSys = getCourseSystem(course);
+        const cLvl = getCourseLevel(course);
+        
+        let cGrade = String(course.年級 || '').trim();
+        if (!cGrade || cGrade === '碩士' || cGrade === '博士' || cGrade === '0') {
+            const classNameRaw = course['開課班別(代表)'] || '';
+            for (const [zh, num] of Object.entries(zhToNum)) {
+                if (classNameRaw.includes(zh)) {
+                    cGrade = num;
+                    break;
                 }
+            }
+            if (!cGrade || cGrade === '碩士' || cGrade === '博士') cGrade = '不分年級';
+        }
+
+        const matchCollege = !college || !cCollege || cCollege === college;
+        const matchDept = !department || !cDept || cDept === department;
+        const matchGrade = (grade === '不分年級') ? (cGrade === '不分年級') : (cGrade === String(grade));
+        const matchSys = !system || cSys === system;
+        const matchLvl = !level || cLvl === level;
+
+        if (matchCollege && matchDept && matchGrade && matchSys && matchLvl) {
+            let displayName = course['開課班別(代表)'];
+            let realClass = course.班級;
+
+            if (!displayName && realClass) displayName = realClass;
+            if (!displayName) displayName = '不分班';
+
+            if (!classMap.has(displayName)) {
+                const safeClass = realClass || displayName;
+                const compositeKey = `${cSys}|${cLvl}|${safeClass}`;
+                
+                classMap.set(displayName, { name: displayName, value: compositeKey });
             }
         }
     });
+    
     Array.from(classMap.values())
         .sort((a, b) => a.name.localeCompare(b.name))
         .forEach(item => select.add(new Option(item.name, item.value)));
+        
+    initSelect2('select-class-schedule');
 }
 
 async function handleImportCourses() {
@@ -230,18 +325,37 @@ async function handleImportCourses() {
 
     try {
         const targetCourses = state.allCoursesData.filter(course => {
-            if (course.學院 !== college) return false;
-            if (course.科系 !== department) return false;
-            if (String(course.年級) !== String(grade)) return false;
+            // 1. 基本欄位比對
+            const cCollege = (course.學院 || '').trim();
+            const cDept = (course.科系 || '').trim();
+            if (college && cCollege && cCollege !== college) return false;
+            if (department && cDept && cDept !== department) return false;
             if (getCourseSystem(course) !== targetSystem) return false;
             if (getCourseLevel(course) !== targetLevel) return false;
-            const cClass = course.班級 || '';
-            if (cClass !== targetClassName) {
-                if (!course['開課班別(代表)'] || !course['開課班別(代表)'].includes(targetClassName)) {
-                    return false;
-                }
+
+            // 2. 年級比對
+            let cGrade = String(course.年級 || '').trim();
+            if (!cGrade || cGrade === '碩士' || cGrade === '博士' || cGrade === '0') {
+                 const classNameRaw = course['開課班別(代表)'] || '';
+                 for (const [zh, num] of Object.entries(zhToNum)) {
+                     if (classNameRaw.includes(zh)) {
+                         cGrade = num;
+                         break;
+                     }
+                 }
+                 if (!cGrade || cGrade === '碩士' || cGrade === '博士') cGrade = '不分年級';
             }
-            return true;
+            if (cGrade !== String(grade)) return false;
+
+            // 3. 班級比對
+            const cClass = course.班級 || '';
+            const cRepresent = course['開課班別(代表)'] || '';
+            
+            if (cClass === targetClassName) return true;
+            if (cRepresent === targetClassName) return true;
+            if (cRepresent.includes(targetClassName)) return true;
+
+            return false;
         });
 
         if (targetCourses.length === 0) {
@@ -343,7 +457,18 @@ async function handleSearchRecommend() {
     
     let searchCollege = document.getElementById('select-college').value;
     let searchDept = document.getElementById('select-dept-recommend') ? document.getElementById('select-dept-recommend').value : null;
-    let searchGrade = document.getElementById('select-grade').value;
+    
+    let rawGradeVal = document.getElementById('select-grade').value;
+    let searchLevel = null;
+    let searchGrade = null;
+
+    if (rawGradeVal && rawGradeVal.includes('|')) {
+        const parts = rawGradeVal.split('|');
+        searchLevel = parts[0];
+        searchGrade = parts[1];
+    } else {
+        searchGrade = rawGradeVal;
+    }
 
     const isGlobalCategory = [
         '核心通識', '精進中文', '精進英外文', 
@@ -385,6 +510,7 @@ async function handleSearchRecommend() {
             college: searchCollege || null,
             department: searchDept || null,
             grade: searchGrade || null,
+            level: searchLevel || null,
             current_courses: state.selectedCourses.map(c => ({ code: c.課程代碼, serial: c.序號 })),
             year: searchYear,
             semester: searchSemester,
@@ -934,6 +1060,72 @@ function detectAndApplyScheduleView() {
     ui.updateScheduleDisplay();
 }
 
+function updateRecommendGradeList() {
+    const college = document.getElementById('select-college').value;
+    const dept = document.getElementById('select-dept-recommend').value;
+    const select = document.getElementById('select-grade');
+    
+    // 預設選項
+    let html = '<option value="">全部年級</option>';
+    
+    if (!state.allCoursesData || state.allCoursesData.length === 0) {
+        select.innerHTML = html;
+        initSelect2('select-grade');
+        return;
+    }
+
+    const groups = {
+        '大學部': new Set(),
+        '碩士班': new Set(),
+        '博士班': new Set()
+    };
+
+    state.allCoursesData.forEach(course => {
+        const cCollege = (course.學院 || '').trim();
+        if (college && cCollege !== college) return;
+
+        const cDept = (course.科系 || '').trim();
+        if (dept && cDept !== dept) return;
+
+        const level = getCourseLevel(course);
+        const gradeRaw = String(course.年級 || '').trim();
+        const gradeMatch = gradeRaw.match(/\d+/);
+        
+        if (level && gradeMatch) {
+            const g = gradeMatch[0];
+            if (groups[level]) {
+                groups[level].add(g);
+            }
+        }
+    });
+
+    // 數字轉中文對照表
+    const numMap = { '1': '一', '2': '二', '3': '三', '4': '四', '5': '五', '6': '六', '7': '七' };
+
+    const buildGroup = (lvl) => {
+        const grades = Array.from(groups[lvl]).sort((a, b) => parseInt(a) - parseInt(b));
+        if (grades.length === 0) return '';
+        
+        const options = grades.map(g => {
+            const zh = numMap[g] || g; // 轉成中文數字
+            let label = `${zh}年級`;
+            if (lvl === '碩士班') label = `碩${zh}`;
+            if (lvl === '博士班') label = `博${zh}`;
+            // value 維持阿拉伯數字以便後端搜尋 (例如 "大學部|1")
+            return `<option value="${lvl}|${g}">${label}</option>`; 
+        }).join('');
+        
+        return `<optgroup label="${lvl}">${options}</optgroup>`;
+    };
+
+    html += buildGroup('大學部');
+    html += buildGroup('碩士班');
+    html += buildGroup('博士班');
+
+    select.innerHTML = html;
+    initSelect2('select-grade');
+}
+
 function setupEventListeners() {
     document.addEventListener('click', e => {
         const sidebar = document.querySelector('.sidebar');
@@ -961,36 +1153,45 @@ function setupEventListeners() {
         loadCoursesData();
     });
 
-    document.getElementById('select-college').addEventListener('change', function() {
+    jQuery('#select-college').on('change', function() {
         loadDepartmentsByCollege(this.value, 'select-dept-recommend');
+        updateRecommendGradeList();
+    });
+
+    jQuery('#select-dept-recommend').on('change', function() {
+        updateRecommendGradeList();
     });
 
     const updateGradeHandler = () => {
         const college = document.getElementById('select-college-schedule').value;
-        const dept = document.getElementById('select-department-schedule').value;
+        const department = document.getElementById('select-department-schedule').value; 
         const sys = document.getElementById('select-system-schedule').value;
         const lvl = document.getElementById('select-level-schedule').value;
         
         document.getElementById('select-grade-schedule').innerHTML = '<option value="">選擇年級</option>';
         document.getElementById('select-class-schedule').innerHTML = '<option value="">選擇班級</option>';
 
-        if (college && dept) {
-            updateGradeList(college, dept, sys, lvl);
+        if (college && department) {
+            updateGradeList(college, department, sys, lvl);
         }
     };
 
-    document.getElementById('select-system-schedule').addEventListener('change', updateGradeHandler);
-    document.getElementById('select-level-schedule').addEventListener('change', updateGradeHandler);
+    jQuery('#select-system-schedule').on('change', updateGradeHandler);
+    jQuery('#select-level-schedule').on('change', updateGradeHandler);
     
-    document.getElementById('select-college-schedule').addEventListener('change', function() {
+    jQuery('#select-college-schedule').on('change', function() {
         loadDepartmentsByCollege(this.value, 'select-department-schedule');
+        
         document.getElementById('select-grade-schedule').innerHTML = '<option value="">選擇年級</option>';
         document.getElementById('select-class-schedule').innerHTML = '<option value="">選擇班級</option>';
+        
+        initSelect2('select-grade-schedule');
+        initSelect2('select-class-schedule');
     });
 
-    document.getElementById('select-department-schedule').addEventListener('change', updateGradeHandler);
+    jQuery('#select-department-schedule').on('change', updateGradeHandler);
 
-    document.getElementById('select-grade-schedule').addEventListener('change', function() {
+    jQuery('#select-grade-schedule').on('change', function() {
         const college = document.getElementById('select-college-schedule').value;
         const dept = document.getElementById('select-department-schedule').value;
         const sys = document.getElementById('select-system-schedule').value;

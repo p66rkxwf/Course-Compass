@@ -144,6 +144,7 @@ class RecommendRequest(BaseModel):
     college: Optional[str] = None
     department: Optional[str] = None
     grade: Optional[str] = None
+    level: Optional[str] = None
     current_courses: List[Dict[str, Any]] = []
     year: Optional[int] = None
     semester: Optional[int] = None
@@ -268,6 +269,24 @@ async def recommend_courses(request: RecommendRequest):
 
         if request.grade and '年級' in filtered.columns:
              filtered = filtered[filtered['年級'].astype(str) == str(request.grade)]
+
+        if request.level:
+            level_col = '部別(大學/碩士/博士)' if '部別(大學/碩士/博士)' in filtered.columns else None
+            if not level_col and '部別' in filtered.columns:
+                level_col = '部別'
+
+            if level_col:
+                filtered = filtered[filtered[level_col].astype(str) == request.level]
+            else:
+                mask_phd = filtered['開課班別(代表)'].astype(str).str.contains('博', na=False) | filtered['年級'].astype(str).str.contains('博', na=False)
+                mask_master = filtered['開課班別(代表)'].astype(str).str.contains('碩', na=False) | filtered['年級'].astype(str).str.contains('碩', na=False)
+
+                if request.level == '博士班':
+                    filtered = filtered[mask_phd]
+                elif request.level == '碩士班':
+                    filtered = filtered[mask_master & ~mask_phd]
+                elif request.level == '大學部':
+                    filtered = filtered[~mask_master & ~mask_phd]
 
         if request.preferred_days:
             day_map = {'1':'一', '2':'二', '3':'三', '4':'四', '5':'五', '6':'六', '7':'日'}
