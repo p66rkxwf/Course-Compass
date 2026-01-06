@@ -356,8 +356,8 @@ async function handleSearchRecommend() {
         searchGrade = null;
     }
 
-    if (emptySlotsOnly && utils.getEmptySlots().length === 0) {
-        ui.showAlert('目前沒有空堂，請取消「只顯示空堂」或先清空課表', 'warning');
+    if (category === '系外選修' && !searchCollege && !searchDept) {
+        ui.showAlert('請選擇「系外選修」的目標學院或科系', 'warning');
         return;
     }
 
@@ -377,10 +377,7 @@ async function handleSearchRecommend() {
 
     try {        
         let apiCategory = category;
-        if (category === '系外選修' && !searchDept) {
-            throw new Error('請選擇「系外選修」的目標學院與科系');
-        }
-
+        
         const payload = {
             empty_slots: emptySlotsOnly ? utils.getEmptySlots() : null,
             target_credits: targetCredits, 
@@ -391,7 +388,7 @@ async function handleSearchRecommend() {
             current_courses: state.selectedCourses.map(c => ({ code: c.課程代碼, serial: c.序號 })),
             year: searchYear,
             semester: searchSemester,
-            preferred_days: selectedDays 
+            preferred_days: selectedDays
         };
         
         const data = await api.fetchRecommendations(payload);
@@ -421,15 +418,7 @@ async function handleSearchRecommend() {
                 courses = courses.filter(c => c.學院 !== userCollege);
             }
         }
-        else if (category === '系外選修') {
-            courses = courses.filter(c => {
-                const matchCollege = !searchCollege || c.學院 === searchCollege;
-                const matchDept = !searchDept || c.科系 === searchDept;
-                const matchGrade = !searchGrade || c.年級 === searchGrade;
-                return matchCollege && matchDept && matchGrade;
-            });
-        }
-
+        
         const dayMap = {'1':'一', '2':'二', '3':'三', '4':'四', '5':'五', '6':'六', '7':'日'};
         courses = courses.filter(course => {
             const cDay = String(course.星期);
@@ -438,6 +427,7 @@ async function handleSearchRecommend() {
             return isMatchNumeric || isMatchChinese;
         });
 
+        // 空堂過濾
         if (emptySlotsOnly) {
             courses = courses.filter(course => {
                 const check = utils.checkTimeConflict(course);
@@ -594,7 +584,7 @@ function renderHistoryChart(data) {
                     pointHoverRadius: 6
                 },
                 {
-                    label: '人數上限',
+                    label: '上限人數',
                     data: capacityData,
                     borderColor: '#dc3545',
                     borderDash: [5, 5],
@@ -633,133 +623,6 @@ function renderHistoryChart(data) {
     });
 }
 
-// function displayHistoryResults(courses, query) {
-//     const container = document.getElementById('history-results-container');
-//     const title = document.getElementById('history-search-title');
-//     const count = document.getElementById('history-result-count');
-
-//     const uniqueCourses = [];
-//     const seen = new Set();
-//     (courses || []).forEach(c => {
-//         const year = String(c.學年度 || '').trim();
-//         const sem = String(c.學期 || '').trim();
-//         const code = String(c.課程代碼 || '').trim();
-//         const serial = String(c.序號 || '').trim();
-//         const key = `${year}_${sem}_${code}_${serial}`;
-//         if (!seen.has(key)) {
-//             seen.add(key);
-//             uniqueCourses.push(c);
-//         }
-//     });
-
-//     if (title) title.textContent = `搜尋結果："${query}"`;
-//     if (count) count.textContent = `共 ${uniqueCourses.length} 筆開課紀錄`;
-
-//     if (!uniqueCourses || uniqueCourses.length === 0) {
-//         if (container) container.innerHTML = '<div class="col-12 text-center text-muted py-5">沒有找到相關資料</div>';
-//         return;
-//     }
-
-//     const groups = {};
-//     uniqueCourses.forEach(c => {
-//         const name = c.課程名稱 || c.中文課程名稱;
-//         const teacher = c.教師姓名;
-//         const key = `${name}_${teacher}`; 
-        
-//         if (!groups[key]) {
-//             groups[key] = {
-//                 name: name,
-//                 teacher: teacher,
-//                 dept: c.科系 || '',
-//                 data: []
-//             };
-//         }
-//         groups[key].data.push(c);
-//     });
-
-//     historyGroupsCache = Object.values(groups);
-
-//     if (container) {
-//         container.innerHTML = historyGroupsCache.map((group, index) => {
-//             let sumRatio = 0;
-//             let validCount = 0;
-
-//             group.data.forEach(item => {
-//                 const registered = parseFloat(item.登記人數 || 0);
-//                 if (registered > 0) {
-//                     let ratio = 50 / registered;
-//                     if (ratio > 1) ratio = 1;
-//                     sumRatio += ratio;
-//                     validCount++;
-//                 }
-//             });
-
-//             const avgRate = validCount > 0 ? (sumRatio / validCount) : 0;
-//             const avgRatePercent = (avgRate * 100).toFixed(0);
-            
-//             let badgeHtml = '';
-//             if (validCount > 0) {
-//                 const badgeClass = avgRate < 0.5 ? 'bg-danger' : 'bg-success'; 
-//                 const icon = avgRate < 0.5 ? '<i class="fas fa-fire me-1"></i>' : '';
-                
-//                 badgeHtml = `
-//                     <span class="badge ${badgeClass} p-2" 
-//                           title="歷年平均選上率: ${avgRatePercent}% (採計 ${validCount} 筆資料)\n公式: 50 / 登記人數 (上限 100%)">
-//                         ${icon}選上率 ${avgRatePercent}%
-//                     </span>`;
-//             } else {
-//                 badgeHtml = `<span class="badge bg-light text-muted border p-2">無選上率資料</span>`;
-//             }
-
-//             const latest = group.data.sort((a, b) => {
-//                 if (b.學年度 !== a.學年度) return b.學年度 - a.學年度;
-//                 return b.學期 - a.學期;
-//             })[0];
-
-//             return `
-//                 <div class="col-md-6 col-lg-4">
-//                     <div class="card h-100 shadow-sm border-0 hover-shadow transition-all" 
-//                          style="cursor: pointer;" 
-//                          onclick="openHistoryModal(${index})">
-//                         <div class="card-body d-flex flex-column">
-//                             <div class="d-flex justify-content-between align-items-start mb-2">
-//                                 <span class="badge bg-primary bg-opacity-10 text-primary">${group.dept}</span>
-//                                 <span class="badge rounded-pill bg-light text-dark border">${group.data.length} 次開課</span>
-//                             </div>
-                            
-//                             <h5 class="card-title fw-bold text-dark mb-1 text-truncate" title="${group.name}">
-//                                 ${group.name}
-//                             </h5>
-                            
-//                             <p class="card-text text-muted small mb-3">
-//                                 <i class="fas fa-chalkboard-teacher me-1"></i> ${group.teacher}
-//                             </p>
-                            
-//                             <div class="mt-auto pt-3 border-top">
-//                                 <div class="d-flex justify-content-between align-items-center">
-//                                     ${badgeHtml}
-//                                     <small class="text-muted">
-//                                         最近: ${latest.學年度}-${latest.學期} <i class="fas fa-chevron-right ms-1"></i>
-//                                     </small>
-//                                 </div>
-//                             </div>
-//                         </div>
-//                     </div>
-//                 </div>
-//             `;
-//         }).join('');
-//     }
-// }
-
-
-
-
-
-
-
-
-
-//fix
 function displayHistoryResults(courses, query) {
     const container = document.getElementById('history-results-container');
     const title = document.getElementById('history-search-title');
@@ -806,26 +669,27 @@ function displayHistoryResults(courses, query) {
         groups[key].data.push(c);
     });
 
-    // 取得分群後的陣列
     historyGroupsCache = Object.values(groups);
 
-    // 3. 排序邏輯：先按中籤率(低到高)，再按飽和度(高到低)
+    // 3. 排序邏輯
     historyGroupsCache.sort((a, b) => {
         const getStats = (group) => {
             let sRateSum = 0, sSatSum = 0, vCount = 0;
             group.data.forEach(item => {
                 const reg = parseFloat(item.登記人數 || 0);
-                const limit = parseFloat(item.人數上限 || 50);
-                const accepted = parseFloat(item.選上人數 || Math.min(reg, limit)); // 若無欄位則取上限
+                const limit = parseFloat(item.上限人數 || 0); 
 
-                if (reg > 0) {
-                    sRateSum += (accepted / reg); // 選上人數 / 登記人數
-                    sSatSum += (reg / limit);     // 登記人數 / 人數上限
+                if (reg > 0 && limit > 0) {
+                    let rate = limit / reg;
+                    if (rate > 1) rate = 1;
+                    
+                    sRateSum += rate;
+                    sSatSum += (reg / limit);
                     vCount++;
                 }
             });
             return {
-                rate: vCount > 0 ? (sRateSum / vCount) : 999, // 無資料排最後
+                rate: vCount > 0 ? (sRateSum / vCount) : 0, 
                 sat: vCount > 0 ? (sSatSum / vCount) : -1
             };
         };
@@ -833,10 +697,14 @@ function displayHistoryResults(courses, query) {
         const statsA = getStats(a);
         const statsB = getStats(b);
 
+        // 先比選上率 (越低代表越難選，排前面)
         if (statsA.rate !== statsB.rate) {
-            return statsA.rate - statsB.rate; // 中籤率低到高 (衡量選課難度)
+            const rA = statsA.rate === 0 ? 999 : statsA.rate;
+            const rB = statsB.rate === 0 ? 999 : statsB.rate;
+            return rA - rB;
         }
-        return statsB.sat - statsA.sat; // 飽和度高到低 (衡量熱門程度)
+        // 再比飽和度 (越高代表越熱門)
+        return statsB.sat - statsA.sat;
     });
 
     // 4. 渲染邏輯
@@ -848,49 +716,46 @@ function displayHistoryResults(courses, query) {
 
             group.data.forEach(item => {
                 const reg = parseFloat(item.登記人數 || 0);
-                const limit = parseFloat(item.人數上限 || 50);
-                const accepted = parseFloat(item.選上人數 || Math.min(reg, limit));
+                const limit = parseFloat(item.上限人數 || 0);
 
-                if (reg > 0) {
-                    sumRate += (accepted / reg);
+                if (reg > 0 && limit > 0) {
+                    let rate = limit / reg;
+                    if (rate > 1) rate = 1;
+                    sumRate += rate;
+
                     sumSaturation += (reg / limit);
                     validCount++;
                 }
             });
 
-            // 選上率計算 (中籤率)
             const avgRate = validCount > 0 ? (sumRate / validCount) : 0;
             const avgRatePercent = (avgRate * 100).toFixed(0);
             
-            // 飽和度計算
             const avgSat = validCount > 0 ? (sumSaturation / validCount) : 0;
             const avgSatPercent = (avgSat * 100).toFixed(0);
             
             let badgesHtml = '';
             if (validCount > 0) {
-                // 中籤率樣式 (衡難度)
                 const rateClass = avgRate < 0.3 ? 'bg-danger' : (avgRate < 0.6 ? 'bg-warning text-dark' : 'bg-success'); 
                 const rateIcon = avgRate < 0.3 ? '<i class="fas fa-exclamation-triangle me-1"></i>' : '<i class="bi bi-dice-5 me-1"></i>';
                 
-                // 飽和度樣式 (衡熱門)
                 const satClass = avgSat >= 1.5 ? 'bg-danger' : (avgSat >= 1.0 ? 'bg-primary' : 'bg-info text-white');
 
                 badgesHtml = `
                     <div class="d-flex flex-wrap gap-1 mt-2">
                         <span class="badge ${rateClass} p-2" 
-                              title="歷年平均中籤率: ${avgRatePercent}% (衡量選課難度)\n公式: 選上人數 / 登記人數">
+                              title="歷年平均中籤率: ${avgRatePercent}%\n公式: 上限人數 / 登記人數 (取上限 100%)">
                             ${rateIcon}中籤率 ${avgRatePercent}%
                         </span>
                         <span class="badge ${satClass} p-2" 
-                              title="歷年平均飽和度: ${avgSatPercent}% (衡量熱門程度)\n公式: 登記人數 / 上限人數">
+                              title="歷年平均飽和度: ${avgSatPercent}%\n公式: 登記人數 / 上限人數">
                             <i class="bi bi-people-fill me-1"></i>飽和度 ${avgSatPercent}%
                         </span>
                     </div>`;
             } else {
-                badgesHtml = `<span class="badge bg-light text-muted border p-2 mt-2">無選上紀錄資料</span>`;
+                badgesHtml = `<span class="badge bg-light text-muted border p-2 mt-2">無完整人數資料</span>`;
             }
 
-            // 取得最新一筆資料
             const latest = group.data.sort((a, b) => {
                 const yearA = parseInt(a.學年度 || 0);
                 const yearB = parseInt(b.學年度 || 0);
@@ -934,12 +799,6 @@ function displayHistoryResults(courses, query) {
         }).join('');
     }
 }
-//fix end
-
-
-
-
-
 
 function exposeGlobalFunctions() {
     window.switchTab = ui.switchTab;

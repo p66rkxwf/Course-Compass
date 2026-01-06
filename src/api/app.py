@@ -48,22 +48,25 @@ def calculate_historical_stats(full_df: pd.DataFrame) -> Dict[tuple, float]:
     if full_df is None or full_df.empty:
         return {}
     
-    if '登記人數' not in full_df.columns:
+    if '登記人數' not in full_df.columns or '上限人數' not in full_df.columns:
         return {}
 
     df = full_df.copy()
     df['登記人數'] = pd.to_numeric(df['登記人數'], errors='coerce').fillna(0)
+    df['上限人數'] = pd.to_numeric(df['上限人數'], errors='coerce').fillna(0)
+    
     df['課程名稱'] = df['課程名稱'].fillna('').astype(str).str.strip()
     df['教師姓名'] = df['教師姓名'].fillna('').astype(str).str.strip()
 
-    valid_mask = (df['登記人數'] > 0)
+    valid_mask = (df['登記人數'] > 0) & (df['上限人數'] > 0)
     valid_df = df[valid_mask].copy()
 
     if valid_df.empty:
         return {}
 
-    valid_df['acceptance_rate'] = 50 / valid_df['登記人數']
+    valid_df['acceptance_rate'] = valid_df['上限人數'] / valid_df['登記人數']
     valid_df['acceptance_rate'] = valid_df['acceptance_rate'].clip(upper=1.0)
+    
     avg_rates = valid_df.groupby(['課程名稱', '教師姓名'])['acceptance_rate'].mean().to_dict()
     
     return avg_rates
@@ -251,6 +254,11 @@ async def recommend_courses(request: RecommendRequest):
              if request.category in ["核心通識", "精進中文", "精進英外文", "教育學程", "大二體育", "大三、四體育"]:
                 filtered = filtered[filtered['開課班別(代表)'].astype(str).str.contains(request.category, na=False)]
         
+        if request.college:
+            c = str(request.college)
+            if '學院' in filtered.columns:
+                filtered = filtered[filtered['學院'] == c]
+
         if request.department:
             d = str(request.department)
             if '科系' in filtered.columns:
@@ -260,6 +268,21 @@ async def recommend_courses(request: RecommendRequest):
 
         if request.grade and '年級' in filtered.columns:
              filtered = filtered[filtered['年級'].astype(str) == str(request.grade)]
+
+        if request.preferred_days:
+            day_map = {'1':'一', '2':'二', '3':'三', '4':'四', '5':'五', '6':'六', '7':'日'}
+            days_set = set(request.preferred_days)
+            
+            def check_day(row_day):
+                d_str = str(row_day)
+                if d_str in days_set: return True
+                if d_str in day_map and str(day_map[d_str]) in days_set: return True
+                for k, v in day_map.items():
+                    if str(v) == d_str and k in days_set: return True
+                return False
+
+            if '星期' in filtered.columns:
+                filtered = filtered[filtered['星期'].apply(check_day)]
 
         if request.current_courses:
             for c in request.current_courses:

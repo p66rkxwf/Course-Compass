@@ -308,10 +308,26 @@ export function showCourseDetailModal(course) {
            </a>` 
         : '<span class="text-muted small">無連結</span>';
 
-    const enrolled = course.選上人數 || 0;
-    const capacity = course.上限人數 || 0;
-    const rate = capacity > 0 ? Math.round((enrolled / capacity) * 100) : 0;
-    const rateBadge = rate >= 100 ? 'bg-danger' : 'bg-success';
+    const enrolled = parseFloat(course.選上人數 || 0);
+    const capacity = parseFloat(course.上限人數 || 0);
+    let saturationPercent = 0;
+    if (capacity > 0) {
+        saturationPercent = Math.round((enrolled / capacity) * 100);
+    }
+
+    let satBadgeClass = 'bg-success';
+    let satText = '名額充足';
+    let satIcon = '<i class="fas fa-check-circle me-1"></i>';
+
+    if (saturationPercent >= 100) {
+        satBadgeClass = 'bg-danger';
+        satText = '已額滿';
+        satIcon = '<i class="fas fa-exclamation-circle me-1"></i>';
+    } else if (saturationPercent >= 80) {
+        satBadgeClass = 'bg-warning text-dark';
+        satText = '即將額滿';
+        satIcon = '<i class="fas fa-exclamation-triangle me-1"></i>';
+    }
 
     const teacherDisplay = course.教師列表 || course.教師姓名 || '未定';
 
@@ -356,15 +372,26 @@ export function showCourseDetailModal(course) {
                 </div>
 
                 <div class="col-12">
-                    <div class="text-muted small mb-1">選課狀況</div>
-                    <div class="border-bottom pb-2 d-flex align-items-center justify-content-between">
-                        <div>
-                            <span class="fw-bold">${enrolled}</span> / ${capacity} 人
+                    <div class="text-muted small mb-1">選課狀況 (飽和度)</div>
+                    <div class="border-bottom pb-2">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <div>
+                                <span class="fw-bold fs-5">${enrolled}</span>
+                                <span class="text-muted mx-1">/</span>
+                                <span class="text-muted">${capacity} 人</span>
+                            </div>
+                            <span class="badge ${satBadgeClass} p-2">
+                                ${satIcon} ${satText}
+                            </span>
                         </div>
-                        <span class="badge ${rateBadge}">${rate}%</span>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar ${satBadgeClass}" role="progressbar" style="width: ${Math.min(saturationPercent, 100)}%" aria-valuenow="${saturationPercent}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="text-end mt-1">
+                            <small class="text-muted">飽和度 ${saturationPercent}%</small>
+                        </div>
                     </div>
                 </div>
-
                 <div class="col-12">
                     <div class="text-muted small mb-1">課程大綱</div>
                     <div>${syllabusLinkHtml}</div>

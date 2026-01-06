@@ -361,36 +361,186 @@
                 </div>
                 <div class="modal-body p-4">
                     <div class="card mb-4 border-0 shadow-sm">
-                         <div class="card-body">
-                             <h6 class="d-flex align-items-center text-primary fw-bold mb-3">
-                                <i class="fas fa-chart-line me-2"></i>歷年選課人數趨勢
-                             </h6>
-                             <div style="height: 300px; position: relative;">
-                                 <canvas id="historyDetailChart"></canvas>
-                             </div>
-                         </div>
+                        <div class="card-body">
+                            <h6 class="card-title fw-bold text-secondary mb-3">
+                                <i class="fas fa-chart-line me-2"></i>歷年人數走勢
+                            </h6>
+                            <div style="height: 250px;">
+                                <canvas id="historyDetailChart"></canvas>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <h6 class="d-flex align-items-center text-primary fw-bold mb-3">
-                        <i class="fas fa-list-ul me-2"></i>歷年開課紀錄與大綱
-                    </h6>
-                    <div class="table-responsive border rounded-3">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr class="text-nowrap">
-                                    <th class="ps-3">學年度</th>
-                                    <th>開課班別</th>
-                                    <th>時間地點</th>
-                                    <th class="text-center">人數 / 上限</th>
-                                    <th class="text-end pe-3">教學大綱</th>
-                                </tr>
-                            </thead>
-                            <tbody id="historyDetailTableBody"></tbody>
-                        </table>
+
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-0 overflow-hidden rounded-3">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <tbody id="historyDetailTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="logicInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold text-dark">
+                        <i class="fas fa-info-circle me-2 text-primary"></i>系統說明
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="d-flex flex-column gap-4">
+                        
+                        <div>
+                            <h6 class="fw-bold text-dark mb-2">
+                                <i class="fas fa-battery-half me-2 text-primary"></i>「飽和度」是什麼？
+                            </h6>
+                            <div class="bg-light p-3 rounded-3 border small text-secondary">
+                                <p class="mb-2">代表這門課目前的<strong>額滿程度</strong>。</p>
+                                <ul class="list-unstyled mb-0 d-flex flex-column gap-2">
+                                    <li class="d-flex align-items-start">
+                                        <span class="badge bg-secondary me-2 flex-shrink-0">公式</span>
+                                        <span>目前選上人數 ÷ 上限人數</span>
+                                    </li>
+                                    <li class="d-flex align-items-center">
+                                        <span class="badge bg-success me-2" style="width: 60px;">綠色</span>
+                                        <span><strong>名額充足 (<80%)</strong>：位置還很多。</span>
+                                    </li>
+                                    <li class="d-flex align-items-center">
+                                        <span class="badge bg-danger me-2" style="width: 60px;">紅色</span>
+                                        <span><strong>已額滿 (≥100%)</strong>：需排候補或加簽。</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h6 class="fw-bold text-dark mb-2">
+                                <i class="fas fa-chart-pie me-2 text-success"></i>「中籤率 (選上率)」是什麼？
+                            </h6>
+                            <div class="bg-light p-3 rounded-3 border small text-secondary">
+                                <p class="mb-2">這是根據<strong>歷年數據</strong>估算的<strong>選中機率</strong>。</p>
+                                <ul class="list-unstyled mb-0 d-flex flex-column gap-2">
+                                    <li class="d-flex align-items-start">
+                                        <span class="badge bg-primary me-2 flex-shrink-0">公式</span>
+                                        <span><strong>上限人數 ÷ 登記人數</strong> (若登記人數少於上限，則為 100%)。</span>
+                                    </li>
+                                    <li class="d-flex align-items-start">
+                                        <i class="fas fa-info-circle text-primary me-2 mt-1"></i>
+                                        <span>數字越低代表越難選上 (例如 30% 代表 10 人搶 3 個位置)。</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h6 class="fw-bold text-dark mb-2">
+                                <i class="far fa-lightbulb me-2 text-warning"></i>選課小撇步
+                            </h6>
+                            <p class="small text-muted mb-0 lh-base">
+                                如果看到中籤率<strong>低於 50%</strong> (紅色)，代表這門課非常搶手！<br>
+                                建議您：
+                                <span class="d-block mt-1 ps-3 border-start border-3 border-danger">
+                                    1. 在志願序中把它<strong>排前面一點</strong>。<br>
+                                    2. 務必多找幾個<strong>備用的課程</strong>。
+                                </span>
+                            </p>
+                        </div>
+
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 p-2">
+                    <button type="button" class="btn btn-sm btn-secondary w-100 rounded-pill" data-bs-dismiss="modal">我知道了</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="logicInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold text-dark">
+                        <i class="fas fa-info-circle me-2 text-primary"></i>系統說明
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="d-flex flex-column gap-4">
+                        
+                        <div>
+                            <h6 class="fw-bold text-dark mb-2">
+                                <i class="fas fa-battery-half me-2 text-primary"></i>「飽和度」是什麼？
+                            </h6>
+                            <div class="bg-light p-3 rounded-3 border small text-secondary">
+                                <p class="mb-2">代表這門課目前的<strong>額滿程度</strong>，判斷是否還能加選。</p>
+                                <ul class="list-unstyled mb-0 d-flex flex-column gap-2">
+                                    <li class="d-flex align-items-start">
+                                        <span class="badge bg-secondary me-2 flex-shrink-0">公式</span>
+                                        <span>目前選上人數 ÷ 上限人數</span>
+                                    </li>
+                                    <li class="d-flex align-items-center">
+                                        <span class="badge bg-success me-2" style="width: 60px;">綠色</span>
+                                        <span><strong>名額充足 (<80%)</strong>：位置還很多，隨選隨上。</span>
+                                    </li>
+                                    <li class="d-flex align-items-center">
+                                        <span class="badge bg-warning text-dark me-2" style="width: 60px;">黃色</span>
+                                        <span><strong>即將額滿 (80-99%)</strong>：名額緊張，手腳要快。</span>
+                                    </li>
+                                    <li class="d-flex align-items-center">
+                                        <span class="badge bg-danger me-2" style="width: 60px;">紅色</span>
+                                        <span><strong>已額滿 (≥100%)</strong>：可能需排候補或找老師加簽。</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h6 class="fw-bold text-dark mb-2">
+                                <i class="fas fa-chart-pie me-2 text-success"></i>「選上率」是什麼？
+                            </h6>
+                            <div class="bg-light p-3 rounded-3 border small text-secondary">
+                                <p class="mb-2">這是根據<strong>歷年數據</strong>估算的<strong>中籤機率</strong> (難易度)。</p>
+                                <ul class="list-unstyled mb-0 d-flex flex-column gap-2">
+                                    <li class="d-flex align-items-start">
+                                        <span class="badge bg-secondary me-2 flex-shrink-0">估算</span>
+                                        <span>系統預設每班約 50 個名額 ÷ 歷年登記想修的人數。</span>
+                                    </li>
+                                    <li class="d-flex align-items-start">
+                                        <i class="fas fa-info-circle text-primary me-2 mt-1"></i>
+                                        <span>此指標僅供參考，實際機率會隨每年熱門程度與名額變動。</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h6 class="fw-bold text-dark mb-2">
+                                <i class="far fa-lightbulb me-2 text-warning"></i>選課小撇步
+                            </h6>
+                            <p class="small text-muted mb-0 lh-base">
+                                如果看到選上率<strong>低於 50%</strong> (紅色)，代表這門課非常搶手！<br>
+                                建議您：
+                                <span class="d-block mt-1 ps-3 border-start border-3 border-danger">
+                                    1. 在志願序中把它<strong>排前面一點</strong>。<br>
+                                    2. 務必多找幾個<strong>備用的課程 (Plan B)</strong>，以免落選。
+                                </span>
+                            </p>
+                        </div>
+
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 p-2">
+                    <button type="button" class="btn btn-sm btn-secondary w-100 rounded-pill" data-bs-dismiss="modal">我知道了</button>
                 </div>
             </div>
         </div>
