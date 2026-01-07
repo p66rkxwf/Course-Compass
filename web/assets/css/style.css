@@ -609,8 +609,14 @@ span.badge.bg-danger {
 }
 
 .course-name { display: block; font-weight: 700; margin-bottom: 2px; }
-.course-teacher { display: block; font-size: 0.8em; opacity: 0.85; }
-.course-info { display: none; }
+.course-teacher { display: block; font-size: 0.8em; opacity: 0.85; margin-bottom: 2px; }
+.course-info { 
+    display: block; 
+    font-size: 0.75em; 
+    opacity: 0.75; 
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
 
 /* 卡片視圖 (Card View) */
 .schedule-cards .day-group {
