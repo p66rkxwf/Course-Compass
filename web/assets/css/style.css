@@ -4,14 +4,14 @@
 
 /* --- 基礎變數 (亮色模式) --- */
 :root {
-    --primary-color: #4361ee;
-    --primary-hover: #3a56d4;
+    --primary-color: #577C8A;
+    --primary-hover: #77969A;
     --primary-light: #eef2ff;
     
     --text-main: #1e293b;
     --text-secondary: #64748b;
-    --bg-body: #f8fafc;
-    --bg-card: #ffffff;
+    --bg-body: #BDC0BA;
+    --bg-card: #FFFFFF;
     --bg-muted: #f1f5f9;
     
     --border-color: #cbd5e1;
@@ -29,9 +29,9 @@
 /* --- 深色模式 - 科技感配色 (低飽和舒適版) --- */
 [data-theme="dark"] {
     /* 主色：稍微降低飽和度，不那麼刺眼 */
-    --primary-color: #60a5fa;
-    --primary-hover: #93c5fd;
-    --primary-light: rgba(96, 165, 250, 0.15);
+    --primary-color: #78C2C4;
+    --primary-hover: #A1D9DB;
+    --primary-light: rgba(120, 194, 196, 0.15);
     
     /* 背景：維持深邃感 */
     --text-main: #f1f5f9;           /* 亮白 */
@@ -121,7 +121,7 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
     background: var(--primary-light);
     color: var(--primary-color);
     border: 1px solid var(--primary-color);
-    box-shadow: 0 0 15px rgba(96, 165, 250, 0.15); 
+    box-shadow: 0 0 15px rgba(112, 100, 154, 0.2); 
 }
 
 /* --- 主要內容區 --- */
@@ -151,6 +151,111 @@ main { flex-grow: 1; overflow-y: auto; height: 100vh; padding: 2rem !important; 
 .card-body { padding: 1.5rem; }
 .card-title { color: var(--text-main) !important; }
 
+/* --- Bootstrap bg-primary 覆蓋 --- */
+.bg-primary {
+    background-color: var(--primary-color) !important;
+}
+
+/* 半透明背景的 badge */
+.bg-primary.bg-opacity-10 {
+    background-color: rgba(112, 100, 154, 0.1) !important; /* 使用 --primary-color #70649A 的 10% 透明度 */
+    color: var(--primary-color) !important;
+}
+
+[data-theme="dark"] .bg-primary.bg-opacity-10 {
+    background-color: rgba(112, 100, 154, 0.15) !important; /* 深色模式使用 --primary-color #70649A 的 15% 透明度 */
+    color: var(--primary-color) !important;
+}
+
+.text-primary {
+    color: var(--primary-color) !important;
+}
+
+.border-primary {
+    border-color: var(--primary-color) !important;
+}
+
+/* --- Bootstrap bg-success 和 bg-danger 覆蓋 --- */
+.bg-success,
+.badge.bg-success,
+span.bg-success,
+div.bg-success {
+    background-color: #2D6D4B !important;
+}
+
+.text-success,
+.badge.text-success,
+span.text-success {
+    color: #2D6D4B !important;
+}
+
+.bg-danger,
+.badge.bg-danger,
+span.bg-danger,
+div.bg-danger {
+    background-color: #CB4042 !important;
+}
+
+.text-danger,
+.badge.text-danger,
+span.text-danger {
+    color: #CB4042 !important;
+}
+
+/* 半透明背景的 success badge */
+.bg-success.bg-opacity-10,
+.badge.bg-success.bg-opacity-10 {
+    background-color: rgba(45, 109, 75, 0.1) !important;
+    color: #2D6D4B !important;
+}
+
+.border-success,
+.badge.border-success {
+    border-color: #2D6D4B !important;
+}
+
+.border-danger,
+.badge.border-danger {
+    border-color: #CB4042 !important;
+}
+
+/* Progress bar 顏色 */
+.progress-bar.bg-success {
+    background-color: #2D6D4B !important;
+}
+
+.progress-bar.bg-danger {
+    background-color: #CB4042 !important;
+}
+
+/* 確保 badge 內的文字顏色正確 */
+.badge.bg-success,
+.badge.bg-success *,
+span.badge.bg-success {
+    color: #ffffff !important;
+}
+
+.badge.bg-danger,
+.badge.bg-danger *,
+span.badge.bg-danger {
+    color: #ffffff !important;
+}
+
+/* 強制覆蓋所有可能的組合 */
+.badge.bg-success.border,
+.badge.bg-success.shadow-sm,
+.badge.bg-success.border-white {
+    background-color: #2D6D4B !important;
+    color: #ffffff !important;
+}
+
+.badge.bg-danger.border,
+.badge.bg-danger.shadow-sm,
+.badge.bg-danger.border-white {
+    background-color: #CB4042 !important;
+    color: #ffffff !important;
+}
+
 /* --- 按鈕 (Buttons) --- */
 .btn {
     border-radius: var(--border-radius-md);
@@ -173,7 +278,7 @@ main { flex-grow: 1; overflow-y: auto; height: 100vh; padding: 2rem !important; 
 
 .btn-primary:hover { 
     background-color: var(--primary-hover); 
-    box-shadow: 0 0 15px rgba(96, 165, 250, 0.3); 
+    box-shadow: 0 0 15px rgba(112, 100, 154, 0.3); 
     transform: translateY(-1px);
 }
 
@@ -229,7 +334,7 @@ main { flex-grow: 1; overflow-y: auto; height: 100vh; padding: 2rem !important; 
 .select2-container--bootstrap-5.select2-container--focus .select2-selection {
     background-color: var(--bg-card) !important;
     border-color: var(--primary-color) !important;
-    box-shadow: 0 0 0 4px rgba(67, 97, 238, 0.15) !important;
+    box-shadow: 0 0 0 4px rgba(112, 100, 154, 0.15) !important;
     color: var(--text-main) !important;
 }
 
@@ -271,6 +376,50 @@ main { flex-grow: 1; overflow-y: auto; height: 100vh; padding: 2rem !important; 
 
 .input-group-merged:focus-within .input-group-text {
     color: var(--primary-color);
+}
+
+/* --- 切換開關和滑塊 (Toggle Switch & Range Slider) --- */
+/* Bootstrap 切換開關 */
+.form-check-input:checked {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.form-check-input:focus {
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 0.25rem rgba(112, 100, 154, 0.25) !important;
+}
+
+/* 滑塊 (Range Slider) */
+.form-range::-webkit-slider-thumb {
+    background-color: var(--primary-color) !important;
+}
+
+.form-range::-moz-range-thumb {
+    background-color: var(--primary-color) !important;
+    border: 0;
+}
+
+.form-range:focus::-webkit-slider-thumb {
+    box-shadow: 0 0 0 1px #fff, 0 0 0 0.25rem rgba(112, 100, 154, 0.25) !important;
+}
+
+.form-range:focus::-moz-range-thumb {
+    box-shadow: 0 0 0 1px #fff, 0 0 0 0.25rem rgba(112, 100, 154, 0.25) !important;
+}
+
+/* 星期按鈕選中狀態 (Day Filter Buttons) */
+.btn-check:checked + .btn,
+.btn-check:active + .btn,
+.btn-check:checked + .btn-outline-secondary {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: #ffffff !important;
+}
+
+.btn-check:checked + .btn *,
+.btn-check:active + .btn * {
+    color: #ffffff !important;
 }
 
 /* =========================================
@@ -353,30 +502,30 @@ main { flex-grow: 1; overflow-y: auto; height: 100vh; padding: 2rem !important; 
 }
 
 /* 課程顏色 - 亮色模式 */
-.schedule-cell.course-required { background-color: #fff7ed; color: #9a3412; border-left-color: #f97316 !important; }
-.schedule-cell.course-elective { background-color: #f0fdf4; color: #166534; border-left-color: #22c55e !important; }
-.schedule-cell.course-general  { background-color: #eff6ff; color: #1e40af; border-left-color: #3b82f6 !important; }
-.schedule-cell.course-language { background-color: #fef2f2; color: #991b1b; border-left-color: #ef4444 !important; }
+.schedule-cell.course-required { background-color: #fff7ed; color: #AB3B3A; border-left-color: #AB3B3A !important; }
+.schedule-cell.course-elective { background-color: #f0fdf4; color: #6C6A2D; border-left-color: #dbb04b !important; }
+.schedule-cell.course-general  { background-color: #eff6ff; color: #336774; border-left-color: #78C2C4 !important; }
+.schedule-cell.course-language { background-color: #fef2f2; color: #70649A; border-left-color: #70649A !important; }
 
 /* 課程顏色 - 深色模式 (降低飽和度) */
 [data-theme="dark"] .schedule-cell.course-required { 
     background-color: rgba(251, 146, 60, 0.15); 
-    color: #fdba74; 
-    border-left-color: #fb923c !important; 
+    color: #ea3734; 
+    border-left-color: #AB3B3A !important; 
 }
 [data-theme="dark"] .schedule-cell.course-elective { 
     background-color: rgba(74, 222, 128, 0.15); 
-    color: #86efac; 
+    color: #dbd65d; 
     border-left-color: #4ade80 !important; 
 }
 [data-theme="dark"] .schedule-cell.course-general { 
     background-color: rgba(96, 165, 250, 0.15); 
-    color: #93c5fd; 
+    color: #66cae4; 
     border-left-color: #60a5fa !important; 
 }
 [data-theme="dark"] .schedule-cell.course-language { 
     background-color: rgba(248, 113, 113, 0.15); 
-    color: #fca5a5; 
+    color: #a695e3; 
     border-left-color: #f87171 !important; 
 }
 
