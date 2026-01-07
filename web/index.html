@@ -342,8 +342,12 @@
                                 <div class="text-center mb-3">
                                     <img src="./assets/images/scatter_selection_vs_saturation.png" 
                                          alt="Selection Rate vs Saturation Scatter Plot" 
-                                         class="img-fluid rounded shadow-sm"
-                                         style="max-width: 100%; height: auto;"
+                                         class="img-fluid rounded shadow-sm cluster-chart-img"
+                                         style="max-width: 100%; height: auto; cursor: pointer;"
+                                         data-bs-toggle="modal"
+                                         data-bs-target="#imageViewerModal"
+                                         data-image-src="./assets/images/scatter_selection_vs_saturation.png"
+                                         data-image-title="Selection Rate vs Saturation by Cluster"
                                          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                                     <div style="display:none; padding: 2rem; background: #f8f9fa; border-radius: 8px; color: #6c757d;">
                                         <i class="fas fa-image fa-3x mb-3"></i>
@@ -366,8 +370,12 @@
                                 <div class="text-center mb-3">
                                     <img src="./assets/images/cluster_distribution.png" 
                                          alt="Cluster Distribution Bar Chart" 
-                                         class="img-fluid rounded shadow-sm"
-                                         style="max-width: 100%; height: auto;"
+                                         class="img-fluid rounded shadow-sm cluster-chart-img"
+                                         style="max-width: 100%; height: auto; cursor: pointer;"
+                                         data-bs-toggle="modal"
+                                         data-bs-target="#imageViewerModal"
+                                         data-image-src="./assets/images/cluster_distribution.png"
+                                         data-image-title="Cluster Distribution"
                                          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                                     <div style="display:none; padding: 2rem; background: #f8f9fa; border-radius: 8px; color: #6c757d;">
                                         <i class="fas fa-image fa-3x mb-3"></i>
@@ -390,8 +398,12 @@
                                 <div class="text-center mb-3">
                                     <img src="./assets/images/cluster_distribution_violin.png" 
                                          alt="Cluster Distribution Violin Plot" 
-                                         class="img-fluid rounded shadow-sm"
-                                         style="max-width: 100%; height: auto;"
+                                         class="img-fluid rounded shadow-sm cluster-chart-img"
+                                         style="max-width: 100%; height: auto; cursor: pointer;"
+                                         data-bs-toggle="modal"
+                                         data-bs-target="#imageViewerModal"
+                                         data-image-src="./assets/images/cluster_distribution_violin.png"
+                                         data-image-title="Distribution by Cluster"
                                          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                                     <div style="display:none; padding: 2rem; background: #f8f9fa; border-radius: 8px; color: #6c757d;">
                                         <i class="fas fa-image fa-3x mb-3"></i>
@@ -429,6 +441,23 @@
     </div>
 
     <div id="sidebarBackdrop" class="sidebar-backdrop d-md-none" aria-hidden="true" onclick="toggleSidebar()"></div>
+
+    <!-- Image Viewer Modal -->
+    <div class="modal fade" id="imageViewerModal" tabindex="-1" aria-labelledby="imageViewerModalLabel" aria-hidden="true" data-bs-backdrop="true" data-bs-keyboard="true">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content bg-dark border-0">
+                <div class="modal-header border-0 p-0" style="position: absolute; top: 15px; right: 15px; z-index: 1055; background: transparent;">
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" style="font-size: 1.8rem; opacity: 1; filter: drop-shadow(0 0 3px rgba(0,0,0,0.5));"></button>
+                </div>
+                <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="min-height: 100vh;">
+                    <div class="text-center w-100 position-relative">
+                        <h5 class="text-white mb-3 fw-bold" id="imageViewerModalTitle" style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1056; text-shadow: 0 2px 4px rgba(0,0,0,0.5);"></h5>
+                        <img id="imageViewerModalImg" src="" alt="" class="img-fluid" style="max-width: 95%; max-height: 90vh; object-fit: contain; margin-top: 60px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="modal fade" id="courseDetailModal" tabindex="-1">
         <div class="modal-dialog">
@@ -625,6 +654,100 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <!-- Image Viewer Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const imageViewerModal = document.getElementById('imageViewerModal');
+            const modalImg = document.getElementById('imageViewerModalImg');
+            const modalTitle = document.getElementById('imageViewerModalTitle');
+            
+            if (!imageViewerModal || !modalImg) {
+                console.error('Image viewer modal elements not found');
+                return;
+            }
+            
+            let bsModalInstance = null;
+            
+            // 使用 Bootstrap 5 的事件监听方式
+            imageViewerModal.addEventListener('show.bs.modal', function(event) {
+                // 修复 aria-hidden 警告
+                imageViewerModal.setAttribute('aria-hidden', 'false');
+                
+                // 获取触发模态框的图片元素
+                const triggerImg = event.relatedTarget || document.querySelector('.cluster-chart-img:focus');
+                
+                if (triggerImg) {
+                    const imageSrc = triggerImg.getAttribute('data-image-src') || triggerImg.src;
+                    const imageTitle = triggerImg.getAttribute('data-image-title') || triggerImg.alt;
+                    
+                    if (imageSrc && modalImg) {
+                        modalImg.src = imageSrc;
+                        modalImg.alt = imageTitle || 'Chart Image';
+                        if (modalTitle) {
+                            modalTitle.textContent = imageTitle || '';
+                        }
+                    }
+                }
+            });
+            
+            // 模态框完全隐藏后的事件
+            imageViewerModal.addEventListener('hidden.bs.modal', function(event) {
+                // 确保 aria-hidden 恢复
+                imageViewerModal.setAttribute('aria-hidden', 'true');
+                
+                // 强制移除可能残留的 backdrop
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(function(backdrop) {
+                    backdrop.remove();
+                });
+                
+                // 移除 body 上的 modal-open class
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            });
+            
+            // 處理所有圖片的點擊事件
+            document.querySelectorAll('.cluster-chart-img').forEach(function(img) {
+                img.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const imageSrc = this.getAttribute('data-image-src') || this.src;
+                    const imageTitle = this.getAttribute('data-image-title') || this.alt;
+                    
+                    if (imageSrc && modalImg) {
+                        modalImg.src = imageSrc;
+                        modalImg.alt = imageTitle || 'Chart Image';
+                        if (modalTitle) {
+                            modalTitle.textContent = imageTitle || '';
+                        }
+                        
+                        // 使用 Bootstrap 5 的方式显示模态框
+                        if (!bsModalInstance) {
+                            bsModalInstance = new bootstrap.Modal(imageViewerModal, {
+                                backdrop: true,
+                                keyboard: true
+                            });
+                        }
+                        bsModalInstance.show();
+                    }
+                });
+            });
+            
+            // ESC 鍵關閉
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && bsModalInstance) {
+                    const isShown = imageViewerModal.classList.contains('show');
+                    if (isShown) {
+                        bsModalInstance.hide();
+                    }
+                }
+            });
+        });
+    </script>
+    
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
