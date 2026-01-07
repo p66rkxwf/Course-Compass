@@ -729,9 +729,9 @@ function openHistoryModal(index) {
             ? `<span class="badge bg-danger rounded-pill">${enrolled}/${capacity}</span>`
             : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill">${enrolled}/${capacity}</span>`;
 
-        const registeredBadge = registered > 0
-            ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 rounded-pill">${registered}</span>`
-            : `<span class="text-muted small">-</span>`;
+        const registeredDisplay = registered > 0
+            ? `${registered}`
+            : `-`;
 
         const teachers = c.教師列表 || c.教師姓名 || '';
 
@@ -784,7 +784,7 @@ function openHistoryModal(index) {
                 </td>
                 <td>${c['開課班別(代表)'] || c.開課班別 || '-'}</td>
                 <td class="small text-muted">${timeLocationHtml}</td>
-                <td class="text-center">${registeredBadge}</td>
+                <td class="text-center">${registeredDisplay}</td>
                 <td class="text-center">${statusBadge}</td>
                 <td class="text-end pe-3">${syllabusBtn}</td>
             </tr>
@@ -821,7 +821,8 @@ function renderHistoryChart(data) {
                     pointBackgroundColor: '#fff',
                     pointBorderColor: '#BC9F77',
                     pointRadius: 4,
-                    pointHoverRadius: 6
+                    pointHoverRadius: 6,
+                    order: 1  // 確保在tooltip中顯示在最上面
                 },
                 {
                     label: '選上人數',
@@ -834,7 +835,8 @@ function renderHistoryChart(data) {
                     pointBackgroundColor: '#fff',
                     pointBorderColor: '#0d6efd',
                     pointRadius: 4,
-                    pointHoverRadius: 6
+                    pointHoverRadius: 6,
+                    order: 2
                 },
                 {
                     label: '上限人數',
@@ -844,7 +846,8 @@ function renderHistoryChart(data) {
                     borderWidth: 2,
                     pointRadius: 0,
                     tension: 0,
-                    fill: false
+                    fill: false,
+                    order: 3
                 }
             ]
         },
@@ -860,7 +863,20 @@ function renderHistoryChart(data) {
                     titleColor: '#000',
                     bodyColor: '#666',
                     borderColor: '#ddd',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    filter: function(tooltipItem) {
+                        // 確保tooltip按照指定順序顯示：登記人數、選上人數、上限人數
+                        return true;
+                    },
+                    itemSort: function(a, b) {
+                        // 自定義排序：確保登記人數顯示在選上人數上面
+                        const order = ['登記人數', '選上人數', '上限人數'];
+                        const indexA = order.indexOf(a.dataset.label);
+                        const indexB = order.indexOf(b.dataset.label);
+                        if (indexA === -1) return 1;
+                        if (indexB === -1) return -1;
+                        return indexA - indexB;
+                    }
                 }
             },
             scales: {
