@@ -806,11 +806,12 @@ function renderHistoryChart(data) {
     const registeredData = data.map(d => d.登記人數 || 0);
 
     historyChartInstance = new Chart(ctx, {
-        type: 'line',
+        type: 'bar',  // 主類型設為bar，但個別dataset可以覆蓋
         data: {
             labels: labels,
             datasets: [
                 {
+                    type: 'line',  // 登記人數使用折線圖
                     label: '登記人數',
                     data: registeredData,
                     borderColor: '#BC9F77',
@@ -822,32 +823,29 @@ function renderHistoryChart(data) {
                     pointBorderColor: '#BC9F77',
                     pointRadius: 4,
                     pointHoverRadius: 6,
-                    order: 1  // 確保在tooltip中顯示在最上面
+                    order: 1,  // 確保在tooltip中顯示在最上面
+                    yAxisID: 'y1'  // 使用右Y軸
                 },
                 {
+                    type: 'bar',  // 選上人數使用直條圖
                     label: '選上人數',
                     data: enrolledData,
+                    backgroundColor: 'rgba(13, 110, 253, 0.6)',
                     borderColor: '#0d6efd',
-                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    fill: true,
-                    pointBackgroundColor: '#fff',
-                    pointBorderColor: '#0d6efd',
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    order: 2
+                    borderWidth: 1,
+                    order: 2,
+                    yAxisID: 'y'
                 },
                 {
+                    type: 'bar',  // 上限人數使用直條圖
                     label: '上限人數',
                     data: capacityData,
+                    backgroundColor: 'rgba(220, 53, 69, 0.3)',
                     borderColor: '#dc3545',
+                    borderWidth: 1,
                     borderDash: [5, 5],
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    tension: 0,
-                    fill: false,
-                    order: 3
+                    order: 3,
+                    yAxisID: 'y'
                 }
             ]
         },
@@ -880,8 +878,36 @@ function renderHistoryChart(data) {
                 }
             },
             scales: {
-                y: { beginAtZero: true, grid: { borderDash: [2, 2] } },
-                x: { grid: { display: false } }
+                y: { 
+                    type: 'linear',
+                    position: 'left',
+                    beginAtZero: true, 
+                    grid: { 
+                        borderDash: [2, 2],
+                        drawOnChartArea: true
+                    },
+                    stacked: false,  // 不堆疊，讓直條圖並排顯示
+                    title: {
+                        display: true,
+                        text: '選上/上限人數'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    beginAtZero: true,
+                    grid: {
+                        drawOnChartArea: false,  // 右Y軸不顯示網格線，避免與左Y軸重疊
+                    },
+                    title: {
+                        display: true,
+                        text: '登記人數'
+                    }
+                },
+                x: { 
+                    grid: { display: false },
+                    stacked: false  // 不堆疊
+                }
             },
             interaction: {
                 mode: 'nearest',
