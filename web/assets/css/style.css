@@ -228,6 +228,66 @@ span.text-danger {
     background-color: #CB4042 !important;
 }
 
+/* --- 飽和度顏色 (Saturation Color) --- */
+/* 覆蓋 bg-info 用於飽和度顯示 */
+.bg-info,
+.badge.bg-info,
+span.bg-info,
+div.bg-info {
+    background-color: #BC9F77 !important;
+}
+
+.text-info,
+.badge.text-info,
+span.text-info {
+    color: #BC9F77 !important;
+}
+
+.badge.bg-info,
+.badge.bg-info *,
+span.badge.bg-info {
+    color: #ffffff !important;
+}
+
+.progress-bar.bg-info {
+    background-color: #BC9F77 !important;
+}
+
+/* 飽和度相關的 primary 顏色（當用於飽和度時） */
+.badge.bg-primary[title*="飽和度"],
+.badge.bg-primary[title*="飽和"],
+span.badge.bg-primary:has(i.bi-people-fill),
+.badge.bg-primary:has(i.bi-people-fill),
+.badge.saturation-badge.bg-primary {
+    background-color: #BC9F77 !important;
+    color: #ffffff !important;
+}
+
+/* 飽和度專用類別 */
+.badge.saturation-badge,
+.badge.saturation-badge.bg-primary,
+.badge.saturation-badge.bg-info {
+    background-color: #BC9F77 !important;
+    color: #ffffff !important;
+}
+
+.badge.saturation-badge *,
+.badge.saturation-badge i {
+    color: #ffffff !important;
+}
+
+/* 飽和度 progress bar（當使用 primary 時） */
+.progress-bar.bg-primary.saturation-bar,
+.progress-bar.saturation-bar {
+    background-color: #BC9F77 !important;
+}
+
+/* 針對包含「飽和度」文字的特定元素 */
+.badge[title*="歷年平均飽和度"] {
+    background-color: #BC9F77 !important;
+    color: #ffffff !important;
+}
+
 /* 確保 badge 內的文字顏色正確 */
 .badge.bg-success,
 .badge.bg-success *,
@@ -299,23 +359,42 @@ span.badge.bg-danger {
 /* 針對被選中 (.active) 的按鈕，強制文字變白 */
 .category-btn.active,
 .category-btn.active:hover,
-.category-btn.active:focus {
+.category-btn.active:focus,
+.category-btn.btn-primary,
+.category-btn.btn-primary:hover,
+.category-btn.btn-primary:focus {
     color: #ffffff !important;
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
 }
 
 /* 確保深色模式下 (.active) 也強制變白 */
 [data-theme="dark"] .category-btn.active,
-[data-theme="dark"] .category-btn.active:hover {
+[data-theme="dark"] .category-btn.active:hover,
+[data-theme="dark"] .category-btn.btn-primary,
+[data-theme="dark"] .category-btn.btn-primary:hover {
     color: #ffffff !important;
 }
 
 /* 確保按鈕裡面的 Icon 圖示也變白 */
 .category-btn.active i,
-.category-btn.active svg {
+.category-btn.active svg,
+.category-btn.btn-primary i,
+.category-btn.btn-primary svg {
     color: #ffffff !important;
     fill: #ffffff !important;
+}
+
+/* 確保未選中的按鈕保持 outline 樣式 */
+.category-btn:not(.active):not(.btn-primary) {
+    background-color: transparent !important;
+    color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.category-btn:not(.active):not(.btn-primary) i,
+.category-btn:not(.active):not(.btn-primary) svg {
+    color: var(--primary-color) !important;
 }
 
 /* --- 表單控制項 (Forms) --- */

@@ -385,7 +385,7 @@ export function showCourseDetailModal(course) {
                             </span>
                         </div>
                         <div class="progress" style="height: 6px;">
-                            <div class="progress-bar ${satBadgeClass}" role="progressbar" style="width: ${Math.min(saturationPercent, 100)}%" aria-valuenow="${saturationPercent}" aria-valuemin="0" aria-valuemax="100"></div>
+                            <div class="progress-bar ${satBadgeClass} saturation-bar" role="progressbar" style="width: ${Math.min(saturationPercent, 100)}%" aria-valuenow="${saturationPercent}" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
                         <div class="text-end mt-1">
                             <small class="text-muted">飽和度 ${saturationPercent}%</small>

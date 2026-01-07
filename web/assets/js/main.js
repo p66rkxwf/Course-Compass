@@ -933,7 +933,7 @@ function displayHistoryResults(courses, query) {
                 const rateClass = avgRate < 0.3 ? 'bg-danger' : (avgRate < 0.6 ? 'bg-warning text-dark' : 'bg-success'); 
                 const rateIcon = avgRate < 0.3 ? '<i class="fas fa-exclamation-triangle me-1"></i>' : '<i class="bi bi-dice-5 me-1"></i>';
                 
-                const satClass = avgSat >= 1.5 ? 'bg-danger' : (avgSat >= 1.0 ? 'bg-primary' : 'bg-info text-white');
+                const satClass = avgSat >= 1.5 ? 'bg-danger' : (avgSat >= 1.0 ? 'bg-primary saturation-badge' : 'bg-info saturation-badge text-white');
 
                 badgesHtml = `
                     <div class="d-flex flex-wrap gap-1 mt-2">
@@ -941,7 +941,7 @@ function displayHistoryResults(courses, query) {
                               title="歷年平均中籤率: ${avgRatePercent}%\n公式: 上限人數 / 登記人數 (取上限 100%)">
                             ${rateIcon}中籤率 ${avgRatePercent}%
                         </span>
-                        <span class="badge ${satClass} p-2" 
+                        <span class="badge ${satClass} p-2 saturation-badge" 
                               title="歷年平均飽和度: ${avgSatPercent}%\n公式: 登記人數 / 上限人數">
                             <i class="bi bi-people-fill me-1"></i>飽和度 ${avgSatPercent}%
                         </span>
