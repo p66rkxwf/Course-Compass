@@ -702,7 +702,8 @@ function openHistoryModal(index) {
                     <th>教師</th>
                     <th>開課班別</th>
                     <th>時間地點</th>
-                    <th class="text-center">人數 / 上限</th>
+                    <th class="text-center">登記人數</th>
+                    <th class="text-center">選上/上限</th>
                     <th class="text-end pe-3">大綱</th>
                 </tr>
             </thead>
@@ -714,6 +715,7 @@ function openHistoryModal(index) {
     newTbody.innerHTML = sortedForList.map(c => {
         const enrolled = c.選上人數 || 0;
         const capacity = c.上限人數 || 0;
+        const registered = c.登記人數 || 0;
         const rate = capacity > 0 ? Math.round((enrolled / capacity) * 100) : 0;
         
         const syllabusUrl = c.教學大綱連結 || c['教學大綱連結'];
@@ -727,7 +729,52 @@ function openHistoryModal(index) {
             ? `<span class="badge bg-danger rounded-pill">${enrolled}/${capacity}</span>`
             : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill">${enrolled}/${capacity}</span>`;
 
+        const registeredBadge = registered > 0
+            ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 rounded-pill">${registered}</span>`
+            : `<span class="text-muted small">-</span>`;
+
         const teachers = c.教師列表 || c.教師姓名 || '';
+
+        // 處理多個時間地點
+        let timeLocationHtml = '';
+        
+        // 檢查是否有時間地點數組或字符串
+        if (Array.isArray(c.時間地點)) {
+            // 如果是數組，顯示所有時間地點
+            timeLocationHtml = c.時間地點.map((item, idx) => {
+                const day = item.星期 || c.星期 || '?';
+                const start = item.起始節次 || c.起始節次 || '';
+                const end = item.結束節次 || c.結束節次 || '';
+                const location = item.上課地點 || c.上課地點 || '';
+                return `<div class="mb-1">週${day} ${start}-${end}節 ${location}</div>`;
+            }).join('');
+        } else if (c.時間地點 && typeof c.時間地點 === 'string' && c.時間地點.includes('(')) {
+            // 如果是字符串格式，嘗試解析多個時間地點
+            // 格式可能是: "(一) 1-2 教室A (二) 3-4 教室B"
+            const timePattern = /\(([一二三四五六日])\)\s*(\d+)-(\d+)\s*([^\s(]+)/g;
+            const matches = [...c.時間地點.matchAll(timePattern)];
+            if (matches.length > 0) {
+                timeLocationHtml = matches.map(match => {
+                    const day = match[1];
+                    const start = match[2];
+                    const end = match[3];
+                    const location = match[4] || '';
+                    return `<div class="mb-1">週${day} ${start}-${end}節 ${location}</div>`;
+                }).join('');
+            } else {
+                // 如果解析失敗，使用原始數據
+                timeLocationHtml = `
+                    <div class="mb-1">週${c.星期 || '?'} ${c.起始節次 || ''}-${c.結束節次 || ''}節</div>
+                    <div>${c.上課地點 || ''}</div>
+                `;
+            }
+        } else {
+            // 單個時間地點
+            timeLocationHtml = `
+                <div class="mb-1">週${c.星期 || '?'} ${c.起始節次 || ''}-${c.結束節次 || ''}節</div>
+                <div>${c.上課地點 || ''}</div>
+            `;
+        }
 
         return `
             <tr>
@@ -736,10 +783,8 @@ function openHistoryModal(index) {
                     ${teachers}
                 </td>
                 <td>${c['開課班別(代表)'] || c.開課班別 || '-'}</td>
-                <td class="small text-muted">
-                    <div>週${c.星期 || '?'} ${c.起始節次 || ''}-${c.結束節次 || ''}節</div>
-                    <div>${c.上課地點 || ''}</div>
-                </td>
+                <td class="small text-muted">${timeLocationHtml}</td>
+                <td class="text-center">${registeredBadge}</td>
                 <td class="text-center">${statusBadge}</td>
                 <td class="text-end pe-3">${syllabusBtn}</td>
             </tr>
@@ -758,12 +803,26 @@ function renderHistoryChart(data) {
     const labels = data.map(d => `${d.學年度}-${d.學期}`);
     const enrolledData = data.map(d => d.選上人數 || 0);
     const capacityData = data.map(d => d.上限人數 || 0);
+    const registeredData = data.map(d => d.登記人數 || 0);
 
     historyChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [
+                {
+                    label: '登記人數',
+                    data: registeredData,
+                    borderColor: '#BC9F77',
+                    backgroundColor: 'rgba(188, 159, 119, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: false,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#BC9F77',
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                },
                 {
                     label: '選上人數',
                     data: enrolledData,
