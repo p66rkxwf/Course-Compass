@@ -334,12 +334,12 @@
                     <div class="card-body p-4">
                         <div class="row g-4">
                             <!-- Chart 1: Scatter Plot -->
-                            <div class="col-12">
+                            <div class="col-md-4">
                                 <div class="text-center mb-3">
                                     <h6 class="fw-bold mb-2">Selection Rate vs Saturation by Cluster</h6>
                                     <p class="text-muted small mb-0">各群組在選課行為特徵上的分布</p>
                                 </div>
-                                <div class="text-center">
+                                <div class="text-center mb-3">
                                     <img src="./assets/images/scatter_selection_vs_saturation.png" 
                                          alt="Selection Rate vs Saturation Scatter Plot" 
                                          class="img-fluid rounded shadow-sm"
@@ -350,15 +350,20 @@
                                         <p>圖片載入失敗，請檢查路徑</p>
                                     </div>
                                 </div>
+                                <div class="px-3">
+                                    <p class="text-muted small mb-0" style="line-height: 1.6;">
+                                        此散點圖展示各群組課程在「中籤率」與「飽和度」兩個維度上的分布特徵。橫軸為飽和度（選上人數/上限人數），縱軸為中籤率（選上人數/登記人數）。不同顏色代表不同的群組，可清楚看出各群組的選課熱門程度與競爭激烈程度。
+                                    </p>
+                                </div>
                             </div>
                             
-                            <!-- Chart 2 & 3: Distribution Charts -->
-                            <div class="col-md-6">
+                            <!-- Chart 2: Cluster Distribution -->
+                            <div class="col-md-4">
                                 <div class="text-center mb-3">
                                     <h6 class="fw-bold mb-2">Cluster Distribution</h6>
                                     <p class="text-muted small mb-0">各群組的課程數量分布</p>
                                 </div>
-                                <div class="text-center">
+                                <div class="text-center mb-3">
                                     <img src="./assets/images/cluster_distribution.png" 
                                          alt="Cluster Distribution Bar Chart" 
                                          class="img-fluid rounded shadow-sm"
@@ -369,14 +374,20 @@
                                         <p>圖片載入失敗，請檢查路徑</p>
                                     </div>
                                 </div>
+                                <div class="px-3">
+                                    <p class="text-muted small mb-0" style="line-height: 1.6;">
+                                        此柱狀圖呈現各群組包含的課程數量。從圖中可以看出各群組的規模大小，幫助理解哪些群組包含較多課程，哪些群組較為稀少。這有助於識別主要的課程類型分布模式。
+                                    </p>
+                                </div>
                             </div>
                             
-                            <div class="col-md-6">
+                            <!-- Chart 3: Violin Plot -->
+                            <div class="col-md-4">
                                 <div class="text-center mb-3">
                                     <h6 class="fw-bold mb-2">Distribution by Cluster</h6>
                                     <p class="text-muted small mb-0">各群組的統計分布特徵</p>
                                 </div>
-                                <div class="text-center">
+                                <div class="text-center mb-3">
                                     <img src="./assets/images/cluster_distribution_violin.png" 
                                          alt="Cluster Distribution Violin Plot" 
                                          class="img-fluid rounded shadow-sm"
@@ -386,6 +397,11 @@
                                         <i class="fas fa-image fa-3x mb-3"></i>
                                         <p>圖片載入失敗，請檢查路徑</p>
                                     </div>
+                                </div>
+                                <div class="px-3">
+                                    <p class="text-muted small mb-0" style="line-height: 1.6;">
+                                        此小提琴圖結合箱線圖與密度分布，展示各群組在中籤率與飽和度上的詳細統計特徵。圖形寬度表示數據密度，可看出各群組的集中趨勢、離散程度以及是否存在多峰分布，提供更深入的群組特徵分析。
+                                    </p>
                                 </div>
                             </div>
                         </div>
