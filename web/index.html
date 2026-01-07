@@ -327,19 +327,68 @@
                     <div class="card-header bg-transparent border-bottom pb-3">
                         <h5 class="mb-0 fw-bold">
                             <i class="fas fa-chart-pie me-2 text-primary"></i>
-                            通識課程 Cluster 分群分析
+                            通識課程分群分析
                         </h5>
                         <p class="text-muted small mb-0 mt-1">基於選課行為（中籤率與飽和度）的 K-Means 分群結果</p>
                     </div>
                     <div class="card-body p-4">
+                        <!-- 群組定義 -->
+                        <div class="mb-4 pb-3 border-bottom">
+                            <h6 class="fw-bold mb-3 text-primary">
+                                <i class="fas fa-layer-group me-2"></i>群組定義
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-md-6 col-lg-3">
+                                    <div class="p-3 rounded h-100" style="background: rgba(87, 124, 138, 0.08); ">
+                                        <div class="fw-bold mb-1 d-flex align-items-center">
+                                            <span class="badge bg-primary me-2" style="font-size: 0.7rem;">Cluster 0</span>
+                                            <span>熱門超額</span>
+                                        </div>
+                                        <div class="small text-muted mt-2">競爭激烈，選上人數超過上限</div>
+                                        <div class="small mt-2 fw-bold text-primary">138 門</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <div class="p-3 rounded h-100" style="background: rgba(87, 124, 138, 0.08);">
+                                        <div class="fw-bold mb-1 d-flex align-items-center">
+                                            <span class="badge bg-primary me-2" style="font-size: 0.7rem;">Cluster 1</span>
+                                            <span>冷門未滿</span>
+                                        </div>
+                                        <div class="small text-muted mt-2">選課人數少，容易選上</div>
+                                        <div class="small mt-2 fw-bold text-primary">68 門</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <div class="p-3 rounded h-100" style="background: rgba(87, 124, 138, 0.08); ">
+                                        <div class="fw-bold mb-1 d-flex align-items-center">
+                                            <span class="badge bg-primary me-2" style="font-size: 0.7rem;">Cluster 2</span>
+                                            <span>特殊案例</span>
+                                        </div>
+                                        <div class="small text-muted mt-2">異常數據，需個別檢視</div>
+                                        <div class="small mt-2 fw-bold text-primary">1 門</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <div class="p-3 rounded h-100" style="background: rgba(87, 124, 138, 0.08);">
+                                        <div class="fw-bold mb-1 d-flex align-items-center">
+                                            <span class="badge bg-primary me-2" style="font-size: 0.7rem;">Cluster 3</span>
+                                            <span>一般熱門</span>
+                                        </div>
+                                        <div class="small text-muted mt-2">中籤率中等，接近滿額</div>
+                                        <div class="small mt-2 fw-bold text-primary">204 門</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 圖表展示 -->
                         <div class="row g-4">
                             <!-- Chart 1: Scatter Plot -->
                             <div class="col-md-4">
-                                <div class="text-center mb-3">
-                                    <h6 class="fw-bold mb-2">Selection Rate vs Saturation by Cluster</h6>
-                                    <p class="text-muted small mb-0">各群組在選課行為特徵上的分布</p>
+                                <div class="text-center mb-2">
+                                    <h6 class="fw-bold mb-1" style="font-size: 0.95rem;">選課行為分布</h6>
                                 </div>
-                                <div class="text-center mb-3">
+                                <div class="text-center mb-2">
                                     <img src="./assets/images/scatter_selection_vs_saturation.png" 
                                          alt="Selection Rate vs Saturation Scatter Plot" 
                                          class="img-fluid rounded shadow-sm cluster-chart-img"
@@ -354,20 +403,17 @@
                                         <p>圖片載入失敗，請檢查路徑</p>
                                     </div>
                                 </div>
-                                <div class="px-3">
-                                    <p class="text-muted small mb-0" style="line-height: 1.6;">
-                                        此散點圖展示各群組課程在「中籤率」與「飽和度」兩個維度上的分布特徵。橫軸為飽和度（選上人數/上限人數），縱軸為中籤率（選上人數/登記人數）。不同顏色代表不同的群組，可清楚看出各群組的選課熱門程度與競爭激烈程度。
-                                    </p>
-                                </div>
+                                <p class="text-muted small mb-0 text-center" style="line-height: 1.5; font-size: 0.85rem;">
+                                    展示各群組在中籤率與飽和度上的分布位置
+                                </p>
                             </div>
                             
                             <!-- Chart 2: Cluster Distribution -->
                             <div class="col-md-4">
-                                <div class="text-center mb-3">
-                                    <h6 class="fw-bold mb-2">Cluster Distribution</h6>
-                                    <p class="text-muted small mb-0">各群組的課程數量分布</p>
+                                <div class="text-center mb-2">
+                                    <h6 class="fw-bold mb-1" style="font-size: 0.95rem;">群組規模</h6>
                                 </div>
-                                <div class="text-center mb-3">
+                                <div class="text-center mb-2">
                                     <img src="./assets/images/cluster_distribution.png" 
                                          alt="Cluster Distribution Bar Chart" 
                                          class="img-fluid rounded shadow-sm cluster-chart-img"
@@ -382,20 +428,17 @@
                                         <p>圖片載入失敗，請檢查路徑</p>
                                     </div>
                                 </div>
-                                <div class="px-3">
-                                    <p class="text-muted small mb-0" style="line-height: 1.6;">
-                                        此柱狀圖呈現各群組包含的課程數量。從圖中可以看出各群組的規模大小，幫助理解哪些群組包含較多課程，哪些群組較為稀少。這有助於識別主要的課程類型分布模式。
-                                    </p>
-                                </div>
+                                <p class="text-muted small mb-0 text-center" style="line-height: 1.5; font-size: 0.85rem;">
+                                    呈現各群組包含的課程數量
+                                </p>
                             </div>
                             
                             <!-- Chart 3: Violin Plot -->
                             <div class="col-md-4">
-                                <div class="text-center mb-3">
-                                    <h6 class="fw-bold mb-2">Distribution by Cluster</h6>
-                                    <p class="text-muted small mb-0">各群組的統計分布特徵</p>
+                                <div class="text-center mb-2">
+                                    <h6 class="fw-bold mb-1" style="font-size: 0.95rem;">統計分布</h6>
                                 </div>
-                                <div class="text-center mb-3">
+                                <div class="text-center mb-2">
                                     <img src="./assets/images/cluster_distribution_violin.png" 
                                          alt="Cluster Distribution Violin Plot" 
                                          class="img-fluid rounded shadow-sm cluster-chart-img"
@@ -410,11 +453,9 @@
                                         <p>圖片載入失敗，請檢查路徑</p>
                                     </div>
                                 </div>
-                                <div class="px-3">
-                                    <p class="text-muted small mb-0" style="line-height: 1.6;">
-                                        此小提琴圖結合箱線圖與密度分布，展示各群組在中籤率與飽和度上的詳細統計特徵。圖形寬度表示數據密度，可看出各群組的集中趨勢、離散程度以及是否存在多峰分布，提供更深入的群組特徵分析。
-                                    </p>
-                                </div>
+                                <p class="text-muted small mb-0 text-center" style="line-height: 1.5; font-size: 0.85rem;">
+                                    顯示各群組的數據集中趨勢與分散程度
+                                </p>
                             </div>
                         </div>
                     </div>

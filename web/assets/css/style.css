@@ -703,6 +703,17 @@ span.badge.bg-danger {
     background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-muted) 100%);
 }
 
+/* 群組定義卡片樣式 */
+#cluster-analysis-section .rounded.h-100 {
+    transition: all 0.2s ease;
+}
+
+#cluster-analysis-section .rounded.h-100:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    background: rgba(87, 124, 138, 0.12) !important;
+}
+
 /* =========================================
    8. 響應式設定 (Responsive)
    ========================================= */
