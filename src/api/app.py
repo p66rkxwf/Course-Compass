@@ -83,6 +83,7 @@ app.add_middleware(
 
 app.mount("/css", StaticFiles(directory=str(WEB_DIR / "assets" / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(WEB_DIR / "assets" / "js")), name="js")
+app.mount("/assets", StaticFiles(directory=str(WEB_DIR / "assets")), name="assets")
 
 _courses_cache: Dict[str, pd.DataFrame] = {}
 

@@ -654,11 +654,40 @@ span.badge.bg-danger {
 }
 
 /* =========================================
-   7. 響應式設定 (Responsive)
+   7. Cluster Analysis Section (歷年查詢頁面)
+   ========================================= */
+#cluster-analysis-section {
+    transition: all 0.3s ease;
+}
+
+#cluster-analysis-section .card-body img {
+    transition: transform 0.3s ease;
+    border: 1px solid var(--border-light);
+}
+
+#cluster-analysis-section .card-body img:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15) !important;
+}
+
+#cluster-analysis-section .card-header {
+    background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-muted) 100%);
+}
+
+/* =========================================
+   8. 響應式設定 (Responsive)
    ========================================= */
 @media (max-width: 768px) {
     .sidebar { position: fixed; left: calc(-1 * var(--sidebar-width)); box-shadow: 2px 0 10px rgba(0,0,0,0.1); transition: left 0.3s; }
     .sidebar.show { left: 0; }
     main { padding: 1rem !important; }
+    
+    #cluster-analysis-section .card-body {
+        padding: 1.5rem !important;
+    }
+    
+    #cluster-analysis-section .col-md-6 {
+        margin-bottom: 1.5rem;
+    }
 }
 
