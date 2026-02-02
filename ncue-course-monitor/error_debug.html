@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta charset="utf-8">
+    <title>DEAN - </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="shortcut icon" href="https://webapss.ncue.edu.tw/DEANV2/favicon.ico" />
+    <!-- global CSS -->
+    <link href="/DEANV2/Content/css?v=XfppdWtmmD7AeIaCE6p-x2n4FAZcWgrlNorqU0v0zeA1" rel="stylesheet"/>
+<link href="/DEANV2/Content/MyCSS?v=nFOnxJfhFfZRyaoUgt5wEKsysbqEgmeh8K1agfBAXEk1" rel="stylesheet"/>
+
+    <script src="/DEANV2/bundles/modernizr?v=wBEWDufH_8Md-Pbioxomt90vm6tJN2Pyy9u9zHtWsPo1"></script>
+
+<script src="/DEANV2/bundles/jquery?v=N2YlHnRI7it2_JoqUZTYWxPtx-s61zIGkk78Q0eabPM1"></script>
+
+    <script src="/DEANV2/bundles/jqueryui?v=hw6jcrpF2LibSX_LeceAnPEcB9rROmvBBgAybQbkxRw1"></script>
+<script src="/DEANV2/bundles/jqueryval?v=eud7FO0_TaQsG8DzD8cs8SrsusYyWkNBciEAU9pzzSE1"></script>
+<script src="/DEANV2/bundles/jqueryAJAX?v=Xuam6TWPhcGt1QT7p5fexG3T-XZA9hjh88zJ89jkDQQ1"></script>
+
+    <script src="/DEANV2/bundles/bootstrap?v=5vOThjBkQoqkLx8SW1NhtXx26ihmsuvhztPSLreW7mU1"></script>
+
+    <script src="/DEANV2/bundles/MyJS?v=gCmj3yvji5vv5mrFHaWgd_aXi87obCt2nDGmJTD8vGk1"></script>
+
+    <link href="/DEANV2/Content/DeanStyle.css" rel="stylesheet" />
+    <!-- Bootstrap -->
+    
+    <script type="text/javascript" language="javascript">
+
+        var fullPath = 'https://webapss.ncue.edu.tw/DEANV2/';
+        function GetPath(url) {
+            return fullPath + url;
+
+        }
+
+    </script>
+
+</head>
+<body>
+    
+    
+
+
+    <div id='mynav' class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+        <div class="container-fluid" style="background-color:cornflowerblue">
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand text-primary" href="#" style="color:azure;font-size:x-large"><b>教務系統開課課程查詢</b></a>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="alert form-signin-heading">
+        
+    </div>
+    <div class="container-fluid">
+            <div>
+                
+
+
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+<style>
+    .bg-query {
+        background-color: #B2D7E5;
+        padding: 15px;
+        color: #333;
+    }
+
+    .panel-heading-custom {
+        background-color: #E6F2F8 !important;
+        padding: 5px 15px;
+        font-weight: bold;
+        border-bottom: 1px solid #99BCDA;
+    }
+
+    .search-table td {
+        padding: 3px 5px;
+        font-size: 13px;
+        vertical-align: middle;
+    }
+
+    .form-control.input-sm {
+        height: 26px;
+        padding: 2px 5px;
+    }
+
+    /* Select2 BS3 適配 */
+    .select2-container--default .select2-selection--single {
+        border: 1px solid #ccc;
+        height: 26px;
+        border-radius: 4px;
+    }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 24px;
+            font-size: 13px;
+        }
+
+    /* 查詢中動畫 */
+    .glyphicon-spin {
+        animation: spin 1s infinite linear;
+        display: inline-block;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(359deg);
+        }
+    }
+
+    #loading-overlay {
+        display: none;
+        text-align: center;
+        padding: 10px;
+        background: #fcf8e3;
+        border: 1px solid #faebcc;
+        color: #8a6d3b;
+        margin-bottom: 10px;
+        font-weight: bold;
+    }
+
+    .loading-opacity {
+        opacity: 0.4;
+        pointer-events: none;
+    }
+
+    /* 列表標題樣式 (14px) */
+    .panel-heading-list {
+        font-size: 14px !important;
+        background-color: #337ab7 !important;
+        color: white !important;
+        font-size: 14px !important;
+        font-weight: bold;
+        padding: 8px 15px;
+    }
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+
+<script type="text/javascript">
+    $(function () {
+        initSelect2();
+        $("#ddl_cls_branch, #ddl_yms_year, #ddl_yms_smester").change(function () {
+            showLoading();
+            $.ajax({
+                url: GetPath('Other/OB010/GetJson_ddl_scj_cls_id'),
+                data: { year: $("#ddl_yms_year").val(), smester: $("#ddl_yms_smester").val(), CLS_BRANCH: $("#ddl_cls_branch").val() },
+                type: "Get",
+                success: UpdateClassOptions
+            });
+        });
+    });
+
+    function initSelect2() {
+        $("#ddl_scj_cls_id").select2({ width: '100%', language: "zh-TW" }).on('change', function () { $(this.form).submit(); });
+    }
+
+    function UpdateClassOptions(data) {
+        var $ddl = $('#ddl_scj_cls_id');
+        if ($ddl.data('select2')) { $ddl.select2('destroy'); }
+        $ddl.empty().append($('<option>').val('').text(''));
+        $.each(data, function (i, item) { $ddl.append($("<option>").attr("value", item.Value).text(item.Text)); });
+        initSelect2();
+        $ddl.closest('form').submit();
+    }
+
+    // 優化後的 OpenWin：標題會顯示老師姓名
+    function OpenWin(url, title) {
+        $('#auditModalLabel').text(title || "詳細資訊");
+        $('#modalBodyContent').html('<iframe id="modalIframe" src="' + url + '" style="width:100%; height:75vh; border:none;"></iframe>');
+        $('#auditModal').modal('show');
+    }
+
+    function showLoading() {
+        // 顯示讀取遮罩
+        $('#loading-overlay').show();
+        $('#result').addClass('loading-opacity');
+
+        // 改變按鈕狀態
+        //var $btn = $('#btnSearch');
+        //$btn.data('original-text', $btn.html()); // 暫存原本的文字
+        //$btn.html('<span class="glyphicon glyphicon-refresh glyphicon-spin"></span> 查詢中...');
+        //$btn.prop('disabled', true); // 禁用按鈕防止重複點擊
+    }
+
+    function hideLoading() {
+        // 隱藏讀取遮罩
+        $('#loading-overlay').hide();
+        $('#result').removeClass('loading-opacity');
+
+        // 恢復按鈕狀態
+        //var $btn = $('#btnSearch');
+        //$btn.html($btn.data('original-text')); // 恢復原本文字
+        //$btn.prop('disabled', false); // 重新啟用按鈕
+    }
+</script>
+
+<form action="/DEANV2/Other/OB010" data-ajax="true" data-ajax-begin="showLoading" data-ajax-complete="hideLoading" data-ajax-method="POST" data-ajax-mode="replace" data-ajax-update="#result" id="form0" method="post"><input name="__RequestVerificationToken" type="hidden" value="ql8ep5snR6zuAjemdC4KNdGJeJs-Avtb5KCGAtaRp4430AEUShal1i05vUOcFXMPMwdHy_Gv3Ttd5iV7nj5AWTaMDHTwPYR0jIKAhhYjn3o1" />    <div class="panel-heading-custom">查詢條件</div>
+    <div class="bg-query">
+        <div class="row">
+            <div class="col-md-5">
+                <table class="search-table" style="width:100%">
+                    <tr><td colspan="4" style="padding-bottom:10px;">請輸入查詢條件</td></tr>
+                    <tr>
+                        <td align="right">日夜間別：</td>
+                        <td><select class="form-control input-sm" id="ddl_cls_branch" name="sel_cls_branch" onchange="$(this.form).submit();"><option value="D">日間部(教務處)</option>
+<option value="N">碩士在職專班(進修學院)</option>
+</select></td>
+                        <td align="right">全英語授課：</td>
+                        <td>
+                            <select class="form-control input-sm" id="sel_scr_english" name="sel_scr_english" onchange="$(this.form).submit();" style="width:60px; display:inline;"><option value=""></option>
+<option value="Y">是</option>
+<option value="N">否</option>
+</select>
+                            遠距：<select class="form-control input-sm" id="sel_SCR_IS_DIS_LEARN" name="sel_SCR_IS_DIS_LEARN" onchange="$(this.form).submit();" style="width:60px; display:inline;"><option value=""></option>
+<option value="Y">是</option>
+<option value="N">否</option>
+</select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="right">學年學期：</td>
+                        <td>
+                            <select class="form-control input-sm" data-val="true" data-val-number="欄位 sel_yms_year 必須是數字。" data-val-required="sel_yms_year 欄位是必要項。" id="ddl_yms_year" name="sel_yms_year" onchange="$(this.form).submit();" style="width:60px; display:inline;"><option value="115">115</option>
+<option selected="selected" value="114">114</option>
+<option value="113">113</option>
+<option value="112">112</option>
+<option value="111">111</option>
+<option value="110">110</option>
+<option value="109">109</option>
+<option value="108">108</option>
+<option value="107">107</option>
+<option value="106">106</option>
+<option value="105">105</option>
+<option value="104">104</option>
+<option value="103">103</option>
+<option value="102">102</option>
+<option value="101">101</option>
+<option value="100">100</option>
+<option value="99">99</option>
+</select> 年
+                            <select class="form-control input-sm" data-val="true" data-val-number="欄位 sel_yms_smester 必須是數字。" data-val-required="sel_yms_smester 欄位是必要項。" id="ddl_yms_smester" name="sel_yms_smester" onchange="$(this.form).submit();" style="width:100px; display:inline;"><option value="1">第一學期</option>
+<option selected="selected" value="2">第二學期</option>
+<option value="3">暑修班(教務處、進修學院)</option>
+<option value="4">暑期班(進修學院)</option>
+</select>
+                        </td>
+                        <td align="right">課程代碼：</td>
+                        <td><input class="form-control input-sm" id="scr_selcode" name="scr_selcode" type="text" value="" /></td>
+                    </tr>
+                    <tr>
+                        <td align="right">修課班別：</td>
+                        <td><select class="form-control input-sm" id="ddl_scj_cls_id" name="sel_cls_id"><option value=""></option>
+<option value="D101B100">性別平權學分學程</option>
+<option value="D101B400">教育大數據微學程(學士班)</option>
+<option value="D101BN1A">教育學院</option>
+<option value="D110B100">員工協助方案學分學程</option>
+<option value="D110BN1A">輔一甲</option>
+<option value="D110BN1B">輔一乙</option>
+<option value="D110BN2A">輔二甲</option>
+<option value="D110BN2B">輔二乙</option>
+<option value="D110BN3A">輔三甲</option>
+<option value="D110BN3B">輔三乙</option>
+<option value="D110BN4A">輔四甲</option>
+<option value="D110BN4B">輔四乙</option>
+<option value="D110DN1A">輔博一</option>
+<option value="D110DN2A">輔博二</option>
+<option value="D110DN3A">輔博三</option>
+<option value="D110M200">表創性藝術治療碩士學分學程</option>
+<option value="D110MN1A">輔碩一</option>
+<option value="D110MN1B">輔婚家碩一</option>
+<option value="D110MN2A">輔碩二</option>
+<option value="D110MN2B">輔婚家碩二</option>
+<option value="D110MN3A">輔碩三</option>
+<option value="D110MN3B">輔婚家碩三</option>
+<option value="D110XV00">輔導碩博</option>
+<option value="D120BN1A">特教一</option>
+<option value="D120BN2A">特教二</option>
+<option value="D120BN3A">特三甲</option>
+<option value="D120BN3B">特三乙</option>
+<option value="D120BN4A">特四甲</option>
+<option value="D120BN4B">特四乙</option>
+<option value="D120DN1A">特博一</option>
+<option value="D120DN2A">特博二</option>
+<option value="D120MN1A">特碩一</option>
+<option value="D120MN2A">特碩二</option>
+<option value="D120MN2B">特資碩二</option>
+<option value="D120MN2C">特輕碩二</option>
+<option value="D120XV00">特碩博</option>
+<option value="D130DN1A">教博一</option>
+<option value="D130DN2A">教博二</option>
+<option value="D130MN1A">教碩一</option>
+<option value="D130MN2A">教碩二</option>
+<option value="D130XV00">教碩博</option>
+<option value="D140BN1A">復大學</option>
+<option value="D140MN1A">復碩一</option>
+<option value="D140MN2A">復碩二</option>
+<option value="D140MN3A">復碩三</option>
+<option value="D140XV00">復碩博</option>
+<option value="D150MN2A">資優碩二</option>
+<option value="D160MN2A">輕障碩二</option>
+<option value="D170MN2A">婚家碩二</option>
+<option value="D190BJ1A">高照原民專班一</option>
+<option value="D190BJ2A">高照原民專班二</option>
+<option value="D190BJ3A">高照原民專班三</option>
+<option value="D190BJ4A">高照原民專班四</option>
+<option value="D201BN1A">理學院</option>
+<option value="D210DN1A">科博一</option>
+<option value="D210DN2A">科博二</option>
+<option value="D210DN4A">科博四</option>
+<option value="D210MN1A">科碩一</option>
+<option value="D210MN2A">科碩二</option>
+<option value="D210XV00">科碩博</option>
+<option value="D220BN1A">數一甲</option>
+<option value="D220BN1B">數一乙</option>
+<option value="D220BN2A">數二甲</option>
+<option value="D220BN2B">數二乙</option>
+<option value="D220BN3A">數三甲</option>
+<option value="D220BN3B">數三乙</option>
+<option value="D220BN4A">數四甲</option>
+<option value="D220BN4B">數四乙</option>
+<option value="D220DN2A">數博二</option>
+<option value="D220DN3A">數博三</option>
+<option value="D220DN4A">數博四</option>
+<option value="D220MN1A">數碩一</option>
+<option value="D220MN2A">數碩二</option>
+<option value="D220XV00">數碩博</option>
+<option value="D230BN1A">物一甲</option>
+<option value="D230BN1B">物一乙</option>
+<option value="D230BN2A">物二甲</option>
+<option value="D230BN2B">物二乙</option>
+<option value="D230BN3A">物三甲</option>
+<option value="D230BN3B">物三乙</option>
+<option value="D230BN4A">物四甲</option>
+<option value="D230BN4B">物四乙</option>
+<option value="D230DN1A">物博一</option>
+<option value="D230DN2A">物博二</option>
+<option value="D230DN3A">物博三</option>
+<option value="D230DN4A">物博四</option>
+<option value="D230DN5A">物博五</option>
+<option value="D230DN6A">物博六</option>
+<option value="D230DN7A">物博七</option>
+<option value="D230MN1A">物碩一</option>
+<option value="D230MN2A">物碩二</option>
+<option value="D230MN3A">物碩三</option>
+<option value="D230MN4A">物碩四</option>
+<option value="D230XV00">物碩博</option>
+<option value="D240BN1A">生一</option>
+<option value="D240BN2A">生二</option>
+<option value="D240BN3A">生三</option>
+<option value="D240BN4A">生四</option>
+<option value="D240MN1A">生碩一</option>
+<option value="D240MN1B">生技碩一</option>
+<option value="D240MN2A">生碩二</option>
+<option value="D240MN2B">生技碩二</option>
+<option value="D250BN1A">化一</option>
+<option value="D250BN2A">化二</option>
+<option value="D250BN3A">化三</option>
+<option value="D250BN4A">化四</option>
+<option value="D250MN1A">化碩一</option>
+<option value="D250MN2A">化碩二</option>
+<option value="D260DN1A">光博一</option>
+<option value="D260DN2A">光博二</option>
+<option value="D260DN3A">光博三</option>
+<option value="D260DN4A">光博四</option>
+<option value="D260DN5A">光博五</option>
+<option value="D260DN6A">光博六</option>
+<option value="D260DN7A">光博七</option>
+<option value="D260MN1A">光碩一</option>
+<option value="D260MN2A">光碩二</option>
+<option value="D260MN3A">光碩三</option>
+<option value="D260MN4A">光碩四</option>
+<option value="D260XV00">光電碩博</option>
+<option value="D270MN2A">生技碩二</option>
+<option value="D280MN1A">統資碩一</option>
+<option value="D280MN2A">統資碩二</option>
+<option value="D290MN1A">理學位碩一</option>
+<option value="D290MN2A">理學位碩二</option>
+<option value="D290MN3A">理學位碩三</option>
+<option value="D301BN1A">科技學院</option>
+<option value="D310BL1A">科技機電產攜專班一</option>
+<option value="D310BL2A">科技機電產攜專班二</option>
+<option value="D310BL3A">科技機電產攜專班三</option>
+<option value="D310BL4A">科技機電產攜專班四</option>
+<option value="D310BM2A">科技鑄造產攜專班二</option>
+<option value="D310BM3A">科技鑄造產攜專班三</option>
+<option value="D310BN1A">科技一甲</option>
+<option value="D310BN1B">科技一乙</option>
+<option value="D310BN2A">科技二甲</option>
+<option value="D310BN2B">科技二乙</option>
+<option value="D310BN3A">科技三甲</option>
+<option value="D310BN3B">科技三乙</option>
+<option value="D310BN4A">科技四甲</option>
+<option value="D310BN4B">科技四乙</option>
+<option value="D310DN1A">科技博一</option>
+<option value="D310DN2A">科技博二</option>
+<option value="D310MN1A">科技碩一</option>
+<option value="D310MN2A">科技碩二</option>
+<option value="D310MN2B">科技數位碩二</option>
+<option value="D310XV00">科技碩博</option>
+<option value="D320DN1A">人管博一</option>
+<option value="D320DN2A">人管博二</option>
+<option value="D320DN3A">人管博三</option>
+<option value="D320MN1A">人管碩一</option>
+<option value="D320MN2A">人管碩二</option>
+<option value="D340MN1A">車輛碩一</option>
+<option value="D340MN2A">車輛碩二</option>
+<option value="D350MN2A">數位碩二</option>
+<option value="D360MN1A">AI碩士學程一</option>
+<option value="D360MN2A">AI碩士學程二</option>
+<option value="D370BN1A">智車一</option>
+<option value="D370BN2A">智車二</option>
+<option value="D370BN3A">智車三</option>
+<option value="D370BN4A">智車四</option>
+<option value="D380MN1A">技職碩一</option>
+<option value="D380MN2A">技職碩二</option>
+<option value="D401BN1A">文學院</option>
+<option value="D410BN1A">英一</option>
+<option value="D410BN2A">英二</option>
+<option value="D410BN3A">英三</option>
+<option value="D410BN4A">英四</option>
+<option value="D410BV11">社體院初級英文</option>
+<option value="D410BV12">社體院中級英文</option>
+<option value="D410BV13">社體院高級英文</option>
+<option value="D410BV1H">精進英外文</option>
+<option value="D410BV1I">教院初級英文</option>
+<option value="D410BV1J">教院中級英文</option>
+<option value="D410BV1K">教院高級英文</option>
+<option value="D410BV1L">文院初級英文</option>
+<option value="D410BV1M">文院中級英文</option>
+<option value="D410BV1N">文院高級英文</option>
+<option value="D410BV1O">理院初級英文</option>
+<option value="D410BV1P">理院中級英文</option>
+<option value="D410BV1Q">理院高級英文</option>
+<option value="D410BV1R">工院初級英文</option>
+<option value="D410BV1S">工院中級英文</option>
+<option value="D410BV1T">工院高級英文</option>
+<option value="D410BV1U">科技院初級英文</option>
+<option value="D410BV1V">科技院中級英文</option>
+<option value="D410BV1W">科技院高級英文</option>
+<option value="D410BV1X">管院初級英文</option>
+<option value="D410BV1Y">管院中級英文</option>
+<option value="D410BV1Z">管院高級英文</option>
+<option value="D410DN1A">英博一</option>
+<option value="D410DN2A">英博二</option>
+<option value="D410DN3A">英博三</option>
+<option value="D410DN4A">英博四</option>
+<option value="D410DN5A">英博五</option>
+<option value="D410DN6A">英博六</option>
+<option value="D410DN7A">英博七</option>
+<option value="D410MN1A">英碩一</option>
+<option value="D410MN2A">英碩二</option>
+<option value="D410MN3A">英碩三</option>
+<option value="D410MN4A">英碩四</option>
+<option value="D420BN1A">國一甲</option>
+<option value="D420BN1B">國一乙</option>
+<option value="D420BN2A">國二甲</option>
+<option value="D420BN2B">國二乙</option>
+<option value="D420BN3A">國三甲</option>
+<option value="D420BN3B">國三乙</option>
+<option value="D420BN4A">國四甲</option>
+<option value="D420BN4B">國四乙</option>
+<option value="D420BV0E">精進中文</option>
+<option value="D420DN1A">國博一</option>
+<option value="D420DN2A">國博二</option>
+<option value="D420MN1A">國碩一</option>
+<option value="D420MN2A">國碩二</option>
+<option value="D420XV00">國碩博</option>
+<option value="D430B100">空間資訊學分學程</option>
+<option value="D430B200">環境教育暨觀光遊憩學分學程</option>
+<option value="D430BN1A">地一</option>
+<option value="D430BN2A">地二</option>
+<option value="D430BN3A">地三</option>
+<option value="D430BN4A">地四</option>
+<option value="D430DN1A">地環博一</option>
+<option value="D430DN2A">地環博二</option>
+<option value="D430MN1A">地碩一</option>
+<option value="D430MN2A">地碩二</option>
+<option value="D430MN2B">地環碩二</option>
+<option value="D430XV00">地碩博</option>
+<option value="D440BN1A">美一</option>
+<option value="D440BN2A">美二</option>
+<option value="D440BN3A">美三</option>
+<option value="D440BN4A">美四</option>
+<option value="D440MN1A">美碩一</option>
+<option value="D440MN1B">美藝碩一</option>
+<option value="D440MN2A">美碩二</option>
+<option value="D440MN2B">美藝碩二</option>
+<option value="D450MN2A">藝碩二</option>
+<option value="D460MN1A">科英碩一</option>
+<option value="D460MN2A">科英碩二</option>
+<option value="D470MN1A">翻譯碩一</option>
+<option value="D470MN2A">翻譯碩二</option>
+<option value="D480MN1A">台文碩一</option>
+<option value="D480MN2A">台文碩二</option>
+<option value="D480XV00">台碩博</option>
+<option value="D490MN2A">環觀碩二</option>
+<option value="D4A0BN1A">歷史與文化產業學分學程</option>
+<option value="D4A0MN1A">歷碩一</option>
+<option value="D4A0MN2A">歷碩二</option>
+<option value="D4A0MN3A">歷碩三</option>
+<option value="D501BN1A">工學院</option>
+<option value="D510BN1A">機電一</option>
+<option value="D510BN2A">機電二</option>
+<option value="D510BN3A">機電三</option>
+<option value="D510BN4A">機電四</option>
+<option value="D510DN1A">機電博一</option>
+<option value="D510DN2A">機電博二</option>
+<option value="D510MN1A">機電碩一</option>
+<option value="D510MN2A">機電碩二</option>
+<option value="D510XV00">機電碩博</option>
+<option value="D520BN1A">電機一</option>
+<option value="D520BN2A">電機二</option>
+<option value="D520BN3A">電機三</option>
+<option value="D520BN4A">電機四</option>
+<option value="D520DN1A">電機博一</option>
+<option value="D520DN2A">電機博二</option>
+<option value="D520DN3A">電機博三</option>
+<option value="D520MN1A">電機碩一</option>
+<option value="D520MN2A">電機碩二</option>
+<option value="D520XV00">電機碩博</option>
+<option value="D530BN1A">電子一</option>
+<option value="D530BN2A">電子二</option>
+<option value="D530BN3A">電子三</option>
+<option value="D530BN4A">電子四</option>
+<option value="D530BU1A">國際電子一</option>
+<option value="D530BU2A">國際電子二</option>
+<option value="D530BU3A">國際電子三</option>
+<option value="D530BU4A">國際電子四</option>
+<option value="D530MN1A">電子碩一</option>
+<option value="D530MN2A">電子碩二</option>
+<option value="D540BN1A">資工一</option>
+<option value="D540BN2A">資工二</option>
+<option value="D540BN3A">資工三</option>
+<option value="D540BN4A">資工四</option>
+<option value="D540MN1A">資工碩一</option>
+<option value="D540MN2A">資工碩二</option>
+<option value="D540MN2B">資工物聯碩二</option>
+<option value="D550MN1A">工學位碩一</option>
+<option value="D550MN2A">工學位碩二</option>
+<option value="D550MN3A">工學位碩三</option>
+<option value="D550MN4A">工學位碩四</option>
+<option value="D560MN2A">積體碩二</option>
+<option value="D570MN2A">電信碩二</option>
+<option value="D580MN2A">顯示碩二</option>
+<option value="D601BN1A">管理學院</option>
+<option value="D610BN1A">資管一</option>
+<option value="D610BN2A">資管二</option>
+<option value="D610BN3A">資管三</option>
+<option value="D610BN4A">資管四</option>
+<option value="D610MN1A">資管碩一</option>
+<option value="D610MN1B">資管數科碩一</option>
+<option value="D610MN2A">資管碩二</option>
+<option value="D610MN2B">資管數科碩二</option>
+<option value="D620BN1A">會一甲</option>
+<option value="D620BN1B">會一乙</option>
+<option value="D620BN2A">會二甲</option>
+<option value="D620BN2B">會二乙</option>
+<option value="D620BN3A">會三甲</option>
+<option value="D620BN3B">會三乙</option>
+<option value="D620BN4A">會四甲</option>
+<option value="D620BN4B">會四乙</option>
+<option value="D620MN1A">會碩一甲</option>
+<option value="D620MN1B">會碩一乙</option>
+<option value="D620MN2A">會碩二甲</option>
+<option value="D620MN2B">會碩二乙</option>
+<option value="D630BN1A">企管一</option>
+<option value="D630BN2A">企管二</option>
+<option value="D630BN3A">企管三</option>
+<option value="D630BN4A">企管四</option>
+<option value="D630MN1A">企管碩一</option>
+<option value="D630MN1B">企管行銷碩一</option>
+<option value="D630MN2A">企管碩二</option>
+<option value="D630MN2B">企管行銷碩二</option>
+<option value="D660MN2A">數科碩二</option>
+<option value="D670BN1A">財金一</option>
+<option value="D670BN2A">財金二</option>
+<option value="D670BN3A">財金三</option>
+<option value="D670BN4A">財金四</option>
+<option value="D670DN1A">財金博一</option>
+<option value="D670DN2A">財金博二</option>
+<option value="D670DN3A">財金博三</option>
+<option value="D670MN1A">財金碩一</option>
+<option value="D670MN2A">財金碩二</option>
+<option value="D701BN1A">社科體院</option>
+<option value="D710BN1A">運一</option>
+<option value="D710BN2A">運二</option>
+<option value="D710BN3A">運三</option>
+<option value="D710BN4A">運四</option>
+<option value="D710MN1A">運碩一</option>
+<option value="D710MN2A">運碩二</option>
+<option value="D720BV0A">核心通識</option>
+<option value="D760MN2A">運科碩二</option>
+<option value="D770MN1A">運健碩一</option>
+<option value="D770MN2A">運健碩二</option>
+<option value="D780B100">公職人員培育學分學程</option>
+<option value="D780BN1A">公育一</option>
+<option value="D780BN2A">公育二</option>
+<option value="D780BN3A">公育三</option>
+<option value="D780BN4A">公育四</option>
+<option value="D780MN1A">公育碩一</option>
+<option value="D780MN2A">公育碩二</option>
+<option value="DM35BV00">全民國防教育課程</option>
+<option value="DMA0BV00">教育學程</option>
+<option value="DMA0BV0B">教育學程(特教)</option>
+<option value="DMD0BV00">大二體育</option>
+<option value="DMD0BV0A">大三、四體育</option>
+<option value="DMM4BV00">語文課</option>
+<option value="DN10BV00">產業學士班</option>
+<option value="DN10MV00">產業碩士班</option>
+<option value="DXZ6MV00">日外校碩士班</option>
+</select></td>
+                        <td align="right">上課時間：</td>
+                        <td><select class="form-control input-sm" id="sel_sct_week" name="sel_sct_week" onchange="$(this.form).submit();"><option value=""></option>
+<option value="1">星期一</option>
+<option value="2">星期二</option>
+<option value="3">星期三</option>
+<option value="4">星期四</option>
+<option value="5">星期五</option>
+<option value="6">星期六</option>
+</select></td>
+                    </tr>
+                    <tr>
+                        <td align="right">課程名稱：</td>
+                        <td><input class="form-control input-sm" id="sub_name" name="sub_name" style="width:75%; display:inline;" type="text" value="" /> <small>(關鍵字)</small></td>
+                        <td align="right">老師姓名：</td>
+                        <td>
+                            <input class="form-control input-sm" id="emp_name" name="emp_name" style="width:100%; display:inline;" type="text" value="" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="4" align="right" style="padding-top: 15px; padding-bottom: 10px;">
+                            <div style="display: inline-block;">
+                                <button type="submit" class="btn btn-info" id="btnSearch" style="font-size: 18px; padding: 6px 16px; ">開始查詢</button>
+                                <a class="btn btn-default" href="/DEANV2/Other/OB010" style="font-size: 18px; padding: 6px 16px; margin-left: 8px;">清除</a>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-7" style="border-left: 1px solid #99BCDA; padding-left:20px;">
+                    <div style="font-size: 13px; line-height: 1.6;"><p><span style="font-family: 微軟正黑體;"><span style="font-size: 14px;"><strong>上限人數</strong>：課程最多可選上人數</span></span><br />
+<span style="font-family: 微軟正黑體;"><span style="font-size: 14px;"><strong>登記人數</strong>：預選階段(新生預選or舊生預選)，有多少人登記想選這門課</span></span><br />
+<span style="font-family: 微軟正黑體;"><span style="font-size: 14px;"><strong>選上人數</strong>：課程實際有選上的人數</span></span></p>
+
+<p><span style="font-size:16px;"><strong><font face="微軟正黑體"><a href="https://rpage.ncue.edu.tw/p/412-1000-89.php?Lang=zh-tw" target="_blank">本校大樓配置圖</a>     <a href="https://acadaff.ncue.edu.tw/var/file/2/1002/img/1011/114294831.html" target="_blank">教室代碼對照表</a></font></strong></span></p>
+
+<p style="font-size:14px;"><span style="color:#0000FF;"><b>教室代碼前二碼為系館大樓，第三碼為樓層，後二碼為教室序號。例 :10312 即白沙大樓三樓第12號教室 。</b></span></p>
+
+<p style="font-size:14px;"><font face="微軟正黑體">一、本校大學部一年級【課程名稱：體育(一)、體育(二)；課程性質：校必(體)】、二年級【開課班別：大二體育；課程性質：校必(體)】，<br />
+　　每學期各1學分，共4學分，均不計入畢業學分。「體育課程選課須知」，請至本校教務處→課務組→選課專區查詢。<br />
+二、本校軍訓課程不列入畢業學分，「軍訓課程選課須知」請至本校教務處→課務組→選課專區查詢。 </font></p>
+</div>
+            </div>
+        </div>
+    </div>
+    <div class="panel panel-primary" style="margin-top:10px;">
+        <div id="loading-overlay"><span class="glyphicon glyphicon-refresh glyphicon-spin"></span> 系統查詢中，請稍候...</div>
+        <div id="result"></div>
+    </div>
+    <div style="position: absolute; left: -9999px; top: -9999px;">
+        <input type="text" name="CatchBot" id="CatchBot" tabindex="-1" autocomplete="off" />
+    </div>
+</form>
+<div class="modal fade" id="auditModal" tabindex="-1" role="dialog" aria-labelledby="auditModalLabel">
+    <div class="modal-dialog modal-lg" role="document" style="width: 90%;">
+        <div class="modal-content">
+            <div class="modal-header" style="background-color: #337ab7; color: white;">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color:white; opacity:1;"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="auditModalLabel">詳細資訊</h4>
+            </div>
+            <div class="modal-body" id="modalBodyContent" style="padding: 0; overflow: hidden;"></div>
+            <div class="modal-footer"><button type="button" class="btn btn-default" data-dismiss="modal">關閉</button></div>
+        </div>
+    </div>
+</div>
+            </div>
+    </div>
+    
+
+</body>
+</html>

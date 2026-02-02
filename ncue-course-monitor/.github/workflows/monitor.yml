@@ -2,26 +2,27 @@ name: NCUE Course Monitor
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  # 每 10 分鐘執行一次
-  workflow_dispatch:       # 支援手動觸發測試
+    - cron: '*/5 * * * *'  # 每 10 分鐘自動執行一次
+  workflow_dispatch:         # 允許手動從網頁點擊執行
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           pip install requests beautifulsoup4
 
-      - name: Run Scraper
+      - name: Run monitor script
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
