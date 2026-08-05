@@ -13,9 +13,23 @@ let historyChartInstance = null;
 // /api/filters 的回傳（學制、學院、通識分類…），推薦頁與搜尋頁共用
 let filterOptions = null;
 
-function initSelect2(id) {
+// 找課頁的所有下拉。全部交給 Select2：原生與 Select2 混用時，收合狀態可以靠 CSS
+// 對齊，但一展開就完全不同（原生是作業系統清單，Select2 是 HTML 面板）。
+const FIND_SELECTS = [
+    'find-category', 'find-general-group', 'find-level', 'find-division',
+    'find-college', 'find-dept', 'find-grade', 'find-sort',
+];
+
+/**
+ * 把原生 select 換成 Select2。
+ *
+ * allowClear 只對「可不選」的篩選開啟：Select2 會把 value="" 的第一個選項當成
+ * placeholder 並從展開清單裡移除，沒有清除鈕的話，選了之後就再也回不到「全部」。
+ * 學年度、學期這類必填欄位則不能開，清空會讓後續查詢失去依據。
+ */
+function initSelect2(id, { allowClear = false } = {}) {
     if (typeof jQuery === 'undefined' || !jQuery.fn.select2) return;
-    
+
     const $el = jQuery(`#${id}`);
     if ($el.length === 0) return;
 
@@ -27,11 +41,28 @@ function initSelect2(id) {
         theme: 'bootstrap-5',
         width: '100%',
         placeholder: $el.find('option:first').text(),
-        allowClear: false,
+        allowClear,
+        // 選項不多時隱藏搜尋框——「日夜間部」只有三個選項，給搜尋框沒有意義
+        minimumResultsForSearch: $el.find('option').length > 10 ? 0 : Infinity,
         language: {
             noResults: () => "沒有找到相關選項"
         }
     });
+
+    // Select2 是用 jQuery 的事件系統送出 change，而 find.js 是以原生
+    // addEventListener 監聽——兩者不相通，選了選項卻不會觸發查詢。
+    // 這裡補送一個原生事件；旗標用來擋住它再被 jQuery 接回來造成無限迴圈。
+    $el.on('change.nativeBridge', function () {
+        if (this.__bridging) return;
+        this.__bridging = true;
+        this.dispatchEvent(new Event('change', { bubbles: true }));
+        this.__bridging = false;
+    });
+}
+
+/** 找課頁的下拉：排序一定要有值，其餘都可以清回「全部」 */
+function initFindSelect(id) {
+    initSelect2(id, { allowClear: id !== 'find-sort' });
 }
 
 document.addEventListener('DOMContentLoaded', initializeApp);
@@ -45,8 +76,10 @@ async function initializeApp() {
     initSystemAndLevelSelects();
     await loadDepartments();
     await loadFilterOptions();
-    // 系所是可不選的篩選條件，一開始就列出全部，不強迫先選學院
+    // 系所與年級都是可不選的篩選條件，一開始就列出全部，不強迫先選學院。
+    // 年級原本只在學院／系所變動時才生成，未選學院時整個選單只有「全部年級」一項。
     await loadDepartmentsByCollege('', 'find-dept', '全部系所');
+    updateFindGradeList();
     find.bindEvents();
     dashboard.initDashboard();
     vacancy.initVacancy();
@@ -65,7 +98,9 @@ async function initializeApp() {
 
     window.addEventListener('resize', debounce(detectAndApplyScheduleView, 200));
     detectAndApplyScheduleView();
-    ['select-year', 'select-semester', 'find-college', 'find-grade', 'select-grade-schedule', 'select-class-schedule', 'select-department-schedule'].forEach(id => initSelect2(id));
+    ['select-year', 'select-semester', 'select-grade-schedule', 'select-class-schedule',
+     'select-department-schedule'].forEach(id => initSelect2(id));
+    FIND_SELECTS.forEach(initFindSelect);
 }
 
 // 設定功能邏輯：主題、視圖、重置
@@ -149,6 +184,8 @@ async function loadFilterOptions() {
     }
 
     await find.initFilters(filterOptions);
+    // initFilters 會直接改寫 innerHTML，Select2 的掛載會失效，必須重新初始化
+    FIND_SELECTS.forEach(initFindSelect);
 }
 
 /**
@@ -337,7 +374,7 @@ async function loadDepartments() {
                 select.add(new Option(dept, dept));
             });
         }
-        initSelect2('find-dept');
+        initFindSelect('find-dept');
     } catch (error) {
         console.error('載入系所列表失敗:', error);
     }
@@ -368,7 +405,7 @@ async function loadDepartmentsByCollege(college, targetSelectId, placeholder = '
             Array.from(departments).sort().forEach(dept => {
                 select.add(new Option(dept, dept));
             });
-            initSelect2(targetSelectId);
+            (targetSelectId === 'find-dept' ? initFindSelect : initSelect2)(targetSelectId);
         }
     } catch (error) {
         console.error('載入科系列表失敗:', error);
@@ -1262,7 +1299,7 @@ function updateFindGradeList() {
     
     if (!state.allCoursesData || state.allCoursesData.length === 0) {
         select.innerHTML = html;
-        initSelect2('find-grade');
+        initFindSelect('find-grade');
         return;
     }
 
@@ -1315,7 +1352,7 @@ function updateFindGradeList() {
     html += buildGroup('博士班');
 
     select.innerHTML = html;
-    initSelect2('find-grade');
+    initFindSelect('find-grade');
 }
 
 function setupEventListeners() {

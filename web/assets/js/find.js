@@ -25,6 +25,22 @@ function el(id) {
     return document.getElementById(id);
 }
 
+/**
+ * 程式改動 Select2 接管的選單後，要另外通知它更新顯示。
+ *
+ * Select2 只在收到 jQuery 的 change 事件時重繪，直接改 <select>.value 它不會知道，
+ * 畫面會停在舊值——曾經出現過「全校性課程」與「通識類別」同時亮著，
+ * 但底層其實只套用了其中一個的情況。
+ *
+ * 用 change.select2 這個命名空間：只觸發 Select2 內部的重繪，
+ * 不會再跑一次我們自己的 change 處理器，因此不會多打一次查詢。
+ */
+function refreshSelectDisplay(element) {
+    if (window.jQuery && element && element.classList.contains('select2-hidden-accessible')) {
+        window.jQuery(element).trigger('change.select2');
+    }
+}
+
 function checkedValues(selector) {
     return Array.from(document.querySelectorAll(selector))
         .filter(input => input.checked)
@@ -112,8 +128,10 @@ function syncCategoryAndGeneral(changed) {
 
     if (changed === 'general' && general.value) {
         category.value = '';
+        refreshSelectDisplay(category);
     } else if (changed === 'category' && category.value) {
         general.value = '';
+        refreshSelectDisplay(general);
         renderGeneralSubs();
     }
 }
@@ -238,7 +256,9 @@ function reset() {
     ['find-category', 'find-level', 'find-division', 'find-college', 'find-general-group',
      'find-dept', 'find-grade'].forEach(id => {
         const select = el(id);
-        if (select) select.value = '';
+        if (!select) return;
+        select.value = '';
+        refreshSelectDisplay(select);
     });
     document.querySelectorAll('.find-day, .find-general-sub').forEach(input => { input.checked = false; });
     ['find-has-vacancy', 'find-english-only', 'find-empty-slots', 'find-exclude-conflicts'].forEach(id => {
@@ -247,7 +267,10 @@ function reset() {
     });
 
     const sort = el('find-sort');
-    if (sort) sort.value = 'score';
+    if (sort) {
+        sort.value = 'score';
+        refreshSelectDisplay(sort);
+    }
 
     renderGeneralSubs();
 
