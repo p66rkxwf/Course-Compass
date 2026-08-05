@@ -213,7 +213,7 @@ function renderHeatmap(data) {
 
     const rows = heat.matrix.map((row, index) => `
         <tr>
-            <th class="text-muted small fw-normal text-end pe-2" style="width:3rem;">第${index + 1}節</th>
+            <th class="text-muted small fw-normal text-end pe-2" style="width:3.75rem;white-space:nowrap;">第${index + 1}節</th>
             ${row.map((count, dayIndex) => {
                 const ratio = count / max;
                 // 底色深的格子改用淺色文字，避免數字被吃掉
@@ -340,7 +340,7 @@ function renderPeriodAcceptance(data) {
 
     const rows = pa.matrix.map((row, index) => `
         <tr>
-            <th class="text-muted small fw-normal text-end pe-2" style="width:3rem;">第${index + 1}節</th>
+            <th class="text-muted small fw-normal text-end pe-2" style="width:3.75rem;white-space:nowrap;">第${index + 1}節</th>
             ${row.map((value, dayIndex) => {
                 if (value == null) {
                     return `<td class="text-center small text-muted"
