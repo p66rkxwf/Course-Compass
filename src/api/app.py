@@ -2,14 +2,23 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pathlib import Path
 import pandas as pd
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set, Tuple
 from pydantic import BaseModel
 
-from config import PROCESSED_DATA_DIR, WEB_DIR, API_HOST, API_PORT, LOG_LEVEL, LOG_FORMAT, LOG_FILE, LOG_DIR
+from config import (
+    PROCESSED_DATA_DIR, WEB_DIR, API_HOST, API_PORT, LOG_LEVEL, LOG_FORMAT, LOG_FILE, LOG_DIR,
+    BASE_URL, REQUEST_TIMEOUT,
+)
 from utils.common import safe_read_csv, setup_logging
+from api import dashboard as dashboard_builder
+from api import filters as course_filters
+from api import search as course_search
+from api import vacancy as vacancy_client
+from api.recommender import rank_courses
 
 def clean_course_data(courses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """清理課程數據，處理 NaN 並規範型別"""
@@ -43,22 +52,68 @@ def clean_single_course(course: Dict[str, Any]) -> Dict[str, Any]:
             cleaned_course[key] = value
     return cleaned_course
 
+# 判定學期是否已完成分發的門檻：選上人數總和 ÷ 上限人數總和。
+# 以上限人數當分母，是因為它在整個選課期間都穩定；登記人數在預選中仍會持續累積。
+# 實測歷年已結算學期落在 64%~70%，預選中的學期為 0%~4%，取 20% 可安全區隔。
+SETTLED_ENROLLMENT_RATIO = 0.2
+
+
+def get_settled_semesters(full_df: pd.DataFrame) -> Set[Tuple[int, int]]:
+    """回傳「已完成分發」的學期集合。
+
+    仍在預選登記中的學期，選上人數尚未公布（或只分發了一小部分），且登記人數還在累積，
+    是不完整的快照。拿它算中籤率會偏樂觀、算飽和度會偏低，因此統計時必須排除。
+    """
+    if full_df is None or full_df.empty:
+        return set()
+    if not {'學年度', '學期', '選上人數', '上限人數'}.issubset(full_df.columns):
+        return set()
+
+    keys = [full_df['學年度'], full_df['學期']]
+    enrolled = pd.to_numeric(full_df['選上人數'], errors='coerce').fillna(0).groupby(keys).sum()
+    capacity = pd.to_numeric(full_df['上限人數'], errors='coerce').fillna(0).groupby(keys).sum()
+
+    settled = set()
+    for key, total_capacity in capacity.items():
+        if total_capacity <= 0:
+            continue
+        if enrolled.get(key, 0) / total_capacity < SETTLED_ENROLLMENT_RATIO:
+            continue
+        try:
+            settled.add((int(key[0]), int(key[1])))
+        except (TypeError, ValueError):
+            continue
+    return settled
+
+
 def calculate_historical_stats(full_df: pd.DataFrame) -> Dict[tuple, float]:
     """計算每門課（同名稱+同教師）的歷年平均選上率"""
     if full_df is None or full_df.empty:
         return {}
-    
+
     if '登記人數' not in full_df.columns or '上限人數' not in full_df.columns:
         return {}
 
     df = full_df.copy()
     df['登記人數'] = pd.to_numeric(df['登記人數'], errors='coerce').fillna(0)
     df['上限人數'] = pd.to_numeric(df['上限人數'], errors='coerce').fillna(0)
-    
+
     df['課程名稱'] = df['課程名稱'].fillna('').astype(str).str.strip()
     df['教師姓名'] = df['教師姓名'].fillna('').astype(str).str.strip()
 
     valid_mask = (df['登記人數'] > 0) & (df['上限人數'] > 0)
+
+    # 排除仍在預選登記中的學期，避免未結算的人數污染歷年統計
+    settled = get_settled_semesters(full_df)
+    if settled and {'學年度', '學期'}.issubset(df.columns):
+        semester_pairs = list(zip(
+            pd.to_numeric(df['學年度'], errors='coerce'),
+            pd.to_numeric(df['學期'], errors='coerce'),
+        ))
+        valid_mask &= pd.Series(
+            [pair in settled for pair in semester_pairs], index=df.index
+        )
+
     valid_df = df[valid_mask].copy()
 
     if valid_df.empty:
@@ -66,9 +121,9 @@ def calculate_historical_stats(full_df: pd.DataFrame) -> Dict[tuple, float]:
 
     valid_df['acceptance_rate'] = valid_df['上限人數'] / valid_df['登記人數']
     valid_df['acceptance_rate'] = valid_df['acceptance_rate'].clip(upper=1.0)
-    
+
     avg_rates = valid_df.groupby(['課程名稱', '教師姓名'])['acceptance_rate'].mean().to_dict()
-    
+
     return avg_rates
 
 app = FastAPI(title="Course Master API", version="1.0.0")
@@ -81,75 +136,146 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 app.mount("/css", StaticFiles(directory=str(WEB_DIR / "assets" / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(WEB_DIR / "assets" / "js")), name="js")
 app.mount("/assets", StaticFiles(directory=str(WEB_DIR / "assets")), name="assets")
 
+# 以資料檔的 (路徑, mtime) 作為快取版本；資料更新後不必重啟 API 就會自動重讀。
+_cache_version: Optional[Tuple[str, float]] = None
 _courses_cache: Dict[str, pd.DataFrame] = {}
+_stats_cache: Dict[str, Any] = {}
+
+def _latest_processed_file() -> Optional[Path]:
+    processed_files = sorted(PROCESSED_DATA_DIR.glob("all_courses_*.csv"))
+    return processed_files[-1] if processed_files else None
+
+def _ensure_cache_fresh(latest_file: Path) -> None:
+    """資料檔換掉或被覆寫時，清空所有衍生快取"""
+    global _cache_version
+    version = (str(latest_file), latest_file.stat().st_mtime)
+    if _cache_version != version:
+        _courses_cache.clear()
+        _stats_cache.clear()
+        _cache_version = version
 
 def get_latest_courses_df() -> Optional[pd.DataFrame]:
-    """取得最新課程資料"""
+    """載入處理後的課程資料集。
+
+    「latest」指的是最新的**處理後檔案**，不是最新學期——這份資料含全部 9 個學期，
+    需要單一學期請再套 course_filters.filter_by_semester()。
+    """
+    latest_file = _latest_processed_file()
+    if latest_file is None:
+        return None
+
+    _ensure_cache_fresh(latest_file)
+
     cache_key = "latest"
     if cache_key in _courses_cache:
         return _courses_cache[cache_key]
-    
-    processed_files = sorted(PROCESSED_DATA_DIR.glob("all_courses_*.csv"))
-    if not processed_files:
-        return None
-    
-    latest_file = processed_files[-1]
+
     df = safe_read_csv(latest_file)
-    
+
     if df is not None:
         if '課程代碼' in df.columns and '序號' in df.columns:
             subset = [c for c in ['學年度', '學期', '課程代碼', '序號'] if c in df.columns]
             df = df.drop_duplicates(subset=subset, keep='last')
         _courses_cache[cache_key] = df
-        
+
     return df
 
-def get_all_historical_courses_df() -> Optional[pd.DataFrame]:
-    """取得所有歷史課程資料"""
-    return get_latest_courses_df()
+def get_historical_stats() -> Dict[tuple, float]:
+    """歷年平均中籤率（隨資料檔快取）。
+
+    原本每次 /search 與 /recommend 請求都對全表重跑一次 groupby，改為只算一次。
+    """
+    df = get_latest_courses_df()
+    if df is None:
+        return {}
+
+    if 'historical_stats' not in _stats_cache:
+        _stats_cache['historical_stats'] = calculate_historical_stats(df)
+    return _stats_cache['historical_stats']
+
+def get_settled_semester_set() -> Set[Tuple[int, int]]:
+    """已完成分發的學期集合（隨資料檔快取）"""
+    df = get_latest_courses_df()
+    if df is None:
+        return set()
+
+    if 'settled_semesters' not in _stats_cache:
+        _stats_cache['settled_semesters'] = get_settled_semesters(df)
+    return _stats_cache['settled_semesters']
 
 def get_courses_by_semester(year: int, semester: int) -> Optional[pd.DataFrame]:
+    df = get_latest_courses_df()
+    if df is None:
+        return None
+
     cache_key = f"{year}_{semester}"
     if cache_key in _courses_cache:
         return _courses_cache[cache_key]
-    
-    df = get_all_historical_courses_df()
-    if df is None:
-        return None
-    
+
     filtered = df[
-        (df['學年度'].astype(str) == str(year)) & 
+        (df['學年度'].astype(str) == str(year)) &
         (df['學期'].astype(str) == str(semester))
     ].copy()
-    
+
     if not filtered.empty:
         _courses_cache[cache_key] = filtered
     return filtered
-
-class CourseSearchRequest(BaseModel):
-    query: str
-    limit: Optional[int] = 50
 
 class CourseResponse(BaseModel):
     courses: List[Dict[str, Any]]
     total: int
 
-class RecommendRequest(BaseModel):
-    empty_slots: Optional[List[Dict[str, int]]] = None
-    target_credits: int = 20
-    category: Optional[str] = None 
+class CourseQueryRequest(BaseModel):
+    """課程查詢的完整條件集合。
+
+    搜尋與推薦本來是兩支端點、兩組幾乎相同的參數（連 category 都是同一個欄位），
+    現在合成同一個查詢：關鍵字、篩選、課表感知（空堂／衝堂／剩餘學分）都在這裡，
+    差別只剩下 sort 選什麼。
+    """
+    # 關鍵字與範圍
+    keyword: Optional[str] = None
+    year: Optional[int] = None
+    semester: Optional[int] = None
+
+    # 篩選條件
+    category: Optional[str] = None               # 全校性課程：核心通識、精進中文…
+    level: Optional[str] = None                  # 學制：大學部／碩士班／博士班／研究所
+    division: Optional[str] = None               # 日間部／夜間部
     college: Optional[str] = None
     department: Optional[str] = None
     grade: Optional[str] = None
-    level: Optional[str] = None
-    current_courses: List[Dict[str, Any]] = []
-    year: Optional[int] = None
-    semester: Optional[int] = None
+    general_group: Optional[str] = None          # 通識大類：跨學院通識／素養通識／校訂必修通識
+    general_subs: Optional[List[str]] = None     # 通識子類：文、理、生活藝能及應用…
     preferred_days: Optional[List[str]] = None
+    periods: Optional[List[int]] = None          # 整段上課時間都要落在這些節次內
+    min_credits: Optional[float] = None
+    max_credits: Optional[float] = None
+    english_only: Optional[bool] = None
+    has_vacancy: Optional[bool] = None
+    exclude_college: Optional[str] = None        # 跨學院通識用：排除本院開的課
+
+    # 課表感知：有送才會啟用，純關鍵字搜尋不必帶
+    empty_slots: Optional[List[Dict[str, int]]] = None
+    current_courses: List[Dict[str, Any]] = []
+    target_credits: Optional[int] = None
+    exclude_conflicts: bool = False
+
+    # 排序與分頁
+    # score／relevance／vacancy／acceptance（最好選上）／competitive（最搶手）／
+    # registered（登記人數最多）／credits／name
+    sort: str = "score"
+    limit: int = 50
+    offset: int = 0
+
+
+# 舊名保留，避免既有呼叫端與文件失效
+RecommendRequest = CourseQueryRequest
 
 @app.get("/")
 async def read_root():
@@ -174,33 +300,89 @@ async def get_all_courses(year: Optional[int] = None, semester: Optional[int] = 
         raise HTTPException(status_code=500, detail="獲取課程列表失敗")
 
 @app.get("/api/courses/search")
-async def search_courses(q: str, limit: int = 50):
+async def search_courses(
+    q: str = "",
+    year: Optional[int] = None,
+    semester: Optional[int] = None,
+    level: Optional[str] = None,
+    general_group: Optional[str] = None,
+    general_subs: Optional[str] = None,
+    category: Optional[str] = None,
+    college: Optional[str] = None,
+    department: Optional[str] = None,
+    grade: Optional[str] = None,
+    division: Optional[str] = None,
+    days: Optional[str] = None,
+    periods: Optional[str] = None,
+    min_credits: Optional[float] = None,
+    max_credits: Optional[float] = None,
+    english_only: bool = False,
+    has_vacancy: bool = False,
+    sort: str = "relevance",
+    limit: int = 50,
+    offset: int = 0,
+):
+    """全站課程搜尋（GET 版，可直接貼網址分享）。
+
+    與 /api/courses/query 走同一套實作，差別只在這裡不接課表感知參數
+    （空堂、衝堂、剩餘學分那些帶結構的欄位不適合塞進 query string），
+    因此預設排序是相關度而非推薦分數。
+
+    逗號分隔的參數（days / general_subs）是為了讓多選條件也能用 GET 表達。
+    """
     try:
-        latest_df = get_latest_courses_df()
-        if latest_df is None or latest_df.empty:
-            raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
+        def csv_param(value: Optional[str]) -> List[str]:
+            return [item.strip() for item in (value or "").split(",") if item.strip()]
 
-        query = q.lower()
-        mask = (
-            latest_df['課程名稱'].astype(str).str.lower().str.contains(query, na=False) |
-            latest_df['教師姓名'].astype(str).str.lower().str.contains(query, na=False) |
-            latest_df['英文課程名稱'].astype(str).str.lower().str.contains(query, na=False)
-        )
-        results = latest_df[mask].head(limit)
-        history_df = get_all_historical_courses_df()
-        stats_map = calculate_historical_stats(history_df)
-        courses = results.to_dict('records')
-        courses = clean_course_data(courses)
-
-        for c in courses:
-            name = str(c.get('課程名稱') or '').strip()
-            teacher = str(c.get('教師姓名') or '').strip()
-            c['historical_acceptance_rate'] = stats_map.get((name, teacher), None)
-
-        return CourseResponse(courses=courses, total=len(courses))
+        return _query_courses(CourseQueryRequest(
+            keyword=q or None,
+            year=year,
+            semester=semester,
+            level=level,
+            general_group=general_group,
+            general_subs=csv_param(general_subs),
+            category=category,
+            college=college,
+            department=department,
+            grade=grade,
+            division=division,
+            preferred_days=csv_param(days),
+            periods=[int(x) for x in csv_param(periods) if x.isdigit()],
+            min_credits=min_credits,
+            max_credits=max_credits,
+            english_only=english_only or None,
+            has_vacancy=has_vacancy or None,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        ))
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"搜索課程失敗: {e}")
         raise HTTPException(status_code=500, detail="搜索失敗")
+
+
+@app.get("/api/filters")
+async def get_filter_options(year: Optional[int] = None, semester: Optional[int] = None):
+    """前端建立篩選選單所需的所有可選值（學制、學院、學制別、通識分類、全校性類別）。
+
+    全部由資料推導，新學期多了或少了什麼類別，前端不必跟著改。
+    """
+    try:
+        df = get_latest_courses_df()
+        if df is None or df.empty:
+            return {"levels": [], "colleges": [], "divisions": [], "general": [], "categories": []}
+
+        year, semester = _resolve_semester(df, year, semester)
+        scoped = course_filters.filter_by_semester(df, year, semester)
+        options = course_filters.build_filter_options(scoped)
+        options["year"] = year
+        options["semester"] = semester
+        return options
+    except Exception as e:
+        logging.error(f"取得篩選選項失敗: {e}")
+        raise HTTPException(status_code=500, detail="取得篩選選項失敗")
 
 @app.get("/api/courses/by-class")
 async def get_courses_by_class(department: str, class_name: str, year: int, semester: int):
@@ -224,129 +406,162 @@ async def get_courses_by_class(department: str, class_name: str, year: int, seme
         logging.error(f"獲取班級課程失敗: {e}")
         raise HTTPException(status_code=500, detail="獲取班級課程失敗")
 
-@app.post("/api/courses/recommend")
-async def recommend_courses(request: RecommendRequest):
+def _resolve_semester(df: pd.DataFrame, year: Optional[int], semester: Optional[int]) -> Tuple[Optional[int], Optional[int]]:
+    """指定學期優先；沒指定就取資料中最新的學期"""
+    if year is not None and semester is not None:
+        return year, semester
+    if df is None or df.empty or '學年度' not in df.columns:
+        return None, None
     try:
-        full_df = get_latest_courses_df() 
-        if full_df is None or full_df.empty:
-            raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
-        
-        if request.year is not None and request.semester is not None:
-            current_year, current_semester = request.year, request.semester
-        else:
-            current_year = int(full_df['學年度'].max()) if '學年度' in full_df.columns else None
-            if current_year:
-                try:
-                    current_semester = int(full_df[full_df['學年度'] == current_year]['學期'].max())
-                except: current_semester = 1
-            else: current_semester = 1
+        latest_year = int(pd.to_numeric(df['學年度'], errors='coerce').max())
+        same_year = df[df['學年度'].astype(str) == str(latest_year)]
+        latest_semester = int(pd.to_numeric(same_year['學期'], errors='coerce').max())
+        return latest_year, latest_semester
+    except (TypeError, ValueError):
+        return None, None
 
-        target_df = pd.DataFrame()
-        if current_year and current_semester:
-            target_df = full_df[
-                (full_df['學年度'].astype(str) == str(current_year)) & 
-                (full_df['學期'].astype(str) == str(current_semester))
-            ].copy()
-        
-        if target_df.empty:
-            return CourseResponse(courses=[], total=0)
-        
-        filtered = target_df.copy()
-        if request.category:
-             if request.category in ["核心通識", "精進中文", "精進英外文", "教育學程", "大二體育", "大三、四體育"]:
-                filtered = filtered[filtered['開課班別(代表)'].astype(str).str.contains(request.category, na=False)]
-        
-        if request.college:
-            c = str(request.college)
-            if '學院' in filtered.columns:
-                filtered = filtered[filtered['學院'] == c]
 
-        if request.department:
-            d = str(request.department)
-            if '科系' in filtered.columns:
-                 filtered = filtered[(filtered['科系'] == d) | (filtered['開課班別(代表)'].str.contains(d, na=False))]
-            else:
-                 filtered = filtered[filtered['開課班別(代表)'].str.contains(d, na=False)]
+def _filter_by_empty_slots(df: pd.DataFrame, empty_slots: Optional[List[Dict[str, int]]]) -> pd.DataFrame:
+    """只留整段上課時間都落在空堂裡的課"""
+    if not empty_slots or df is None or df.empty:
+        return df
+    if not {'星期', '起始節次', '結束節次'}.issubset(df.columns):
+        return df
 
-        if request.grade and '年級' in filtered.columns:
-             filtered = filtered[filtered['年級'].astype(str) == str(request.grade)]
+    available = {
+        (int(slot['day']), int(slot['period']))
+        for slot in empty_slots
+        if isinstance(slot, dict) and 'day' in slot and 'period' in slot
+    }
+    if not available:
+        return df
 
-        if request.level:
-            level_col = '部別(大學/碩士/博士)' if '部別(大學/碩士/博士)' in filtered.columns else None
-            if not level_col and '部別' in filtered.columns:
-                level_col = '部別'
+    days = df['星期'].map(course_filters.normalize_weekday)
+    starts = pd.to_numeric(df['起始節次'], errors='coerce')
+    ends = pd.to_numeric(df['結束節次'], errors='coerce')
 
-            if level_col:
-                filtered = filtered[filtered[level_col].astype(str) == request.level]
-            else:
-                mask_phd = filtered['開課班別(代表)'].astype(str).str.contains('博', na=False) | filtered['年級'].astype(str).str.contains('博', na=False)
-                mask_master = filtered['開課班別(代表)'].astype(str).str.contains('碩', na=False) | filtered['年級'].astype(str).str.contains('碩', na=False)
+    keep = []
+    for day, start, end in zip(days, starts, ends):
+        if not day or start != start or end != end or start <= 0 or end <= 0:
+            keep.append(False)
+            continue
+        keep.append(all((day, p) in available for p in range(int(start), int(end) + 1)))
 
-                if request.level == '博士班':
-                    filtered = filtered[mask_phd]
-                elif request.level == '碩士班':
-                    filtered = filtered[mask_master & ~mask_phd]
-                elif request.level == '大學部':
-                    filtered = filtered[~mask_master & ~mask_phd]
+    return df[pd.Series(keep, index=df.index)]
 
-        if request.preferred_days:
-            day_map = {'1':'一', '2':'二', '3':'三', '4':'四', '5':'五', '6':'六', '7':'日'}
-            days_set = set(request.preferred_days)
-            
-            def check_day(row_day):
-                d_str = str(row_day)
-                if d_str in days_set: return True
-                if d_str in day_map and str(day_map[d_str]) in days_set: return True
-                for k, v in day_map.items():
-                    if str(v) == d_str and k in days_set: return True
-                return False
 
-            if '星期' in filtered.columns:
-                filtered = filtered[filtered['星期'].apply(check_day)]
+def _query_courses(request: CourseQueryRequest) -> Dict[str, Any]:
+    """課程查詢的唯一實作：條件篩選 → 評分 → 排序 → 分頁。
 
-        if request.current_courses:
-            for c in request.current_courses:
-                code, serial = str(c.get('code','')), str(c.get('serial',''))
-                filtered = filtered[~((filtered['課程代碼'].astype(str)==code) & (filtered['序號'].astype(str)==serial))]
+    /api/courses/query、/api/courses/recommend、/api/courses/search 全部走這裡，
+    避免同一套篩選邏輯有三份實作而各自漂移。
 
-        if request.empty_slots:
-            empty_set = set((int(s['day']), int(s['period'])) for s in request.empty_slots if s and 'day' in s and 'period' in s)
-            def fits(row):
-                try:
-                    day = row.get('星期')
-                    if pd.isna(day): return False
-                    if str(day).isdigit(): d_num = int(day)
-                    else: d_num = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':7}.get(str(day))
-                    if not d_num: return False
-                    s, e = int(row.get('起始節次') or 0), int(row.get('結束節次') or 0)
-                    if s <= 0 or e <= 0: return False
-                    for p in range(s, e+1):
-                        if (d_num, p) not in empty_set: return False
-                    return True
-                except: return False
-            filtered = filtered[filtered.apply(fits, axis=1)]
+    分頁一定發生在所有條件套用完、排序完之後。舊版是先 head(50) 才讓前端補做
+    開課班別／星期／空堂過濾，符合條件的課會在截斷時就被丟掉，
+    使用者常看到「只找到 3 門」但實際上有幾十門。
+    """
+    full_df = get_latest_courses_df()
+    if full_df is None or full_df.empty:
+        raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
 
-        history_df = get_all_historical_courses_df()
-        stats_map = calculate_historical_stats(history_df)
+    year, semester = _resolve_semester(full_df, request.year, request.semester)
+    empty_result = {
+        "courses": [], "total": 0, "returned": 0, "limit": request.limit,
+        "offset": request.offset, "has_more": False, "year": year, "semester": semester,
+    }
 
-        results_list = filtered.head(50).to_dict('records')
-        results_list = clean_course_data(results_list)
-        
-        for c in results_list:
-            name = str(c.get('課程名稱') or '').strip()
-            teacher = str(c.get('教師姓名') or '').strip()
-            c['historical_acceptance_rate'] = stats_map.get((name, teacher), None)
+    target_df = course_filters.filter_by_semester(full_df, year, semester)
+    if target_df is None or target_df.empty:
+        return empty_result
 
-        return CourseResponse(courses=results_list, total=len(results_list))
-        
+    filtered = course_filters.apply_filters(
+        target_df,
+        level=request.level,
+        general_group=request.general_group,
+        general_subs=request.general_subs,
+        category=request.category,
+        college=request.college,
+        department=request.department,
+        grade=request.grade,
+        division=request.division,
+        days=request.preferred_days,
+        periods=request.periods,
+        min_credits=request.min_credits,
+        max_credits=request.max_credits,
+        english_only=request.english_only,
+        has_vacancy=request.has_vacancy,
+        keyword=request.keyword,
+        exclude_courses=request.current_courses,
+    )
+
+    # 跨學院通識不能選本院開的課。原本前端是比對「學院」欄位，但核心通識課的學院
+    # 一律是「通識教育中心」，永遠不會等於學生的學院，這條規則等於沒有生效；
+    # 真正帶領域資訊的是課程性質後綴（跨學院通識(文) = 文學院開的）。
+    if request.exclude_college:
+        filtered = course_filters.exclude_own_college_general(filtered, request.exclude_college)
+
+    filtered = _filter_by_empty_slots(filtered, request.empty_slots)
+
+    if filtered is None or filtered.empty:
+        return empty_result
+
+    stats_map = get_historical_stats()
+    courses = clean_course_data(filtered.to_dict('records'))
+
+    # 一律先評分：即使使用者選了別的排序，前端仍要顯示每門課的推薦分數與理由
+    ranked = rank_courses(
+        courses,
+        full_df=full_df,
+        stats_map=stats_map,
+        semester_settled=(year, semester) in get_settled_semester_set(),
+        target_credits=request.target_credits,
+        current_courses=request.current_courses,
+        exclude_conflicts=request.exclude_conflicts,
+    )
+
+    if request.sort and request.sort != "score":
+        ranked = course_search.rank_results(
+            ranked, request.keyword, sort=request.sort, stats_map=stats_map
+        )
+
+    page, meta = course_search.paginate(ranked, request.limit, request.offset)
+    return {
+        "courses": page,
+        "returned": len(page),
+        "year": year,
+        "semester": semester,
+        "sort": request.sort,
+        **meta,
+    }
+
+
+@app.post("/api/courses/query")
+async def query_courses(request: CourseQueryRequest):
+    """課程查詢（搜尋與推薦合一）。關鍵字、篩選、課表感知、排序都在同一支。"""
+    try:
+        return _query_courses(request)
+    except HTTPException:
+        raise
     except Exception as e:
-        logging.error(f"推薦 API 錯誤: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"系統錯誤: {str(e)}")
+        logging.error(f"課程查詢失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"系統錯誤: {e}")
+
+
+@app.post("/api/courses/recommend")
+async def recommend_courses(request: CourseQueryRequest):
+    """/api/courses/query 的別名，保留給既有呼叫端。"""
+    try:
+        return _query_courses(request)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"推薦 API 錯誤: {e}")
+        raise HTTPException(status_code=500, detail=f"系統錯誤: {e}")
 
 @app.get("/api/courses/history")
 async def get_course_history(q: str, limit: int = 100):
     try:
-        df = get_all_historical_courses_df()
+        df = get_latest_courses_df()
         if df is None or df.empty:
             raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
         
@@ -364,21 +579,117 @@ async def get_course_history(q: str, limit: int = 100):
 
 @app.get("/api/courses/stats")
 async def get_course_stats():
+    """簡易統計（保留舊介面）；儀表板請改用 /api/dashboard"""
     try:
         df = get_latest_courses_df()
         if df is None or df.empty:
-             raise HTTPException(status_code=404)
-        stats = {
+            raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
+        return {
             "total_courses": len(df),
             "total_teachers": df['教師姓名'].nunique() if '教師姓名' in df.columns else 0,
             "departments": df['開課班別(代表)'].value_counts().head(10).to_dict() if '開課班別(代表)' in df.columns else {},
             "course_types": df['課程性質'].value_counts().to_dict() if '課程性質' in df.columns else {},
             "english_only": int(df['全英語授課'].sum()) if '全英語授課' in df.columns else 0,
             "avg_enrollment": float(df['選上人數'].mean()) if '選上人數' in df.columns else 0,
-            "max_enrollment": int(df['選上人數'].max()) if '選上人數' in df.columns else 0
+            "max_enrollment": int(df['選上人數'].max()) if '選上人數' in df.columns else 0,
         }
-        return stats
-    except: raise HTTPException(500)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"取得統計失敗: {e}")
+        raise HTTPException(status_code=500, detail="取得統計失敗")
+
+
+@app.get("/api/dashboard")
+async def get_dashboard(year: Optional[int] = None, semester: Optional[int] = None):
+    """統計儀表板：總覽、學期趨勢、學院／學制分佈、時段熱區、搶手與好選課排行。
+
+    所有牽涉登記/選上的統計都只採計已結算學期，理由同 get_settled_semesters()。
+    """
+    try:
+        full_df = get_latest_courses_df()
+        if full_df is None or full_df.empty:
+            raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
+
+        year, semester = _resolve_semester(full_df, year, semester)
+        current_df = course_filters.filter_by_semester(full_df, year, semester)
+
+        return dashboard_builder.build_dashboard(
+            full_df, current_df, get_settled_semester_set(), year, semester
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"取得儀表板資料失敗: {e}")
+        raise HTTPException(status_code=500, detail="取得儀表板資料失敗")
+
+
+@app.get("/api/vacancy")
+async def get_vacancy(codes: str, year: Optional[int] = None, semester: Optional[int] = None):
+    """即時查詢課程目前的登記/上限（直接問學校站台，不看已爬好的 CSV）。
+
+    缺額是會秒變的資料，用快取好的 CSV 回答只會給出過期答案，因此這支是唯一
+    會對外發請求的端點。單次最多查 vacancy_client.MAX_CODES_PER_REQUEST 門。
+    """
+    try:
+        code_list = [c.strip() for c in (codes or "").split(",") if c.strip()]
+        if not code_list:
+            raise HTTPException(status_code=400, detail="請提供至少一個課程代碼")
+
+        df = get_latest_courses_df()
+        year, semester = _resolve_semester(df, year, semester)
+        if year is None or semester is None:
+            raise HTTPException(status_code=400, detail="無法判斷查詢學期，請指定 year 與 semester")
+
+        results = vacancy_client.fetch_vacancy(
+            BASE_URL, year, semester, code_list, timeout=min(REQUEST_TIMEOUT, 30)
+        )
+        return {
+            "year": year,
+            "semester": semester,
+            "results": results,
+            "truncated": len(code_list) > vacancy_client.MAX_CODES_PER_REQUEST,
+            "max_codes": vacancy_client.MAX_CODES_PER_REQUEST,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"查詢缺額失敗: {e}")
+        raise HTTPException(status_code=500, detail="查詢缺額失敗")
+
+@app.get("/api/semesters")
+async def get_semesters():
+    """資料中可用的學期清單（新到舊）。
+
+    has_results=False 代表該學期仍在預選登記中（選上人數尚未公布），
+    前端據此標示「預選登記中」並將該學期排除於中籤率/飽和度統計之外。
+    """
+    try:
+        df = get_latest_courses_df()
+        if df is None or df.empty or not {'學年度', '學期'}.issubset(df.columns):
+            return {"semesters": []}
+
+        settled = get_settled_semester_set()
+        counts = df.groupby(['學年度', '學期']).size()
+
+        semesters = []
+        for (year, semester), count in counts.items():
+            try:
+                year, semester = int(year), int(semester)
+            except (TypeError, ValueError):
+                continue
+            semesters.append({
+                "year": year,
+                "semester": semester,
+                "has_results": (year, semester) in settled,
+                "course_count": int(count),
+            })
+
+        semesters.sort(key=lambda s: (s["year"], s["semester"]), reverse=True)
+        return {"semesters": semesters}
+    except Exception as e:
+        logging.error(f"獲取學期列表失敗: {e}")
+        raise HTTPException(status_code=500, detail="獲取學期列表失敗")
 
 @app.get("/api/courses/{course_id}")
 async def get_course_detail(course_id: str):

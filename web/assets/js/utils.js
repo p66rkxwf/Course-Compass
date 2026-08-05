@@ -48,6 +48,33 @@ export function checkTimeConflict(course) {
     return { hasConflict: false, day, startPeriod, endPeriod };
 }
 
+// 找出課程與課表衝突的「所有」既有課程
+// checkTimeConflict 只回傳第一門，跨多節的課可能同時撞到好幾門，批次處理時需要完整清單
+export function findConflictingCourses(course) {
+    const day = WEEKDAY_MAP[course.星期] || parseInt(course.星期);
+    const startPeriod = parseInt(course.起始節次);
+    const endPeriod = parseInt(course.結束節次);
+
+    if (!day || !startPeriod || !endPeriod) {
+        return { day, startPeriod, endPeriod, conflicts: [] };
+    }
+
+    const seen = new Set();
+    const conflicts = [];
+
+    for (let p = startPeriod; p <= endPeriod; p++) {
+        const occupied = state.currentSchedule[day] && state.currentSchedule[day][p];
+        if (!occupied) continue;
+
+        const key = `${occupied.課程代碼}_${occupied.序號}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        conflicts.push(occupied);
+    }
+
+    return { day, startPeriod, endPeriod, conflicts };
+}
+
 // 將傳入的課程物件規範化為前端期望的欄位
 export function normalizeCourse(raw = {}) {
     // 優先欄位映射：中文課程名稱 -> 課程名稱 -> title

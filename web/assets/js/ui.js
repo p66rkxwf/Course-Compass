@@ -1,6 +1,7 @@
 import { WEEKDAYS, WEEKDAY_MAP, PERIOD_TIMES, PERIOD_ORDER } from './config.js';
 import { state } from './state.js';
 import { checkTimeConflict } from './utils.js';
+import * as api from './api.js';
 
 export function showAlert(message, type = 'info') {
     const iconMap = { info: 'info', success: 'success', warning: 'warning', danger: 'error', error: 'error' };
@@ -179,7 +180,7 @@ export function updateSelectedCoursesList() {
     const rawTotal = state.selectedCourses.reduce((sum, c) => sum + (parseFloat(c.學分) || 0), 0);
     const totalCredits = Number.isInteger(rawTotal) ? rawTotal : rawTotal.toFixed(1);
     
-    const targetInput = document.getElementById('range-credits');
+    const targetInput = document.getElementById('find-target-credits');
     const target = targetInput ? (parseFloat(targetInput.value) || 0) : 0;
     
     const isOver = target > 0 && rawTotal > target;
@@ -220,42 +221,89 @@ export function updateSelectedCoursesList() {
     `).join('');
 }
 
-export function renderRecommendResults(courses) {
-    const container = document.getElementById('recommend-courses-grid');
-    if (courses.length === 0) {
-        container.innerHTML = '<div class="col-12 text-center text-muted py-5">沒有找到符合條件的課程</div>';
-        return;
+// 查詢結果的呈現方式：'card'（適合瀏覽）或 'list'（一次看得到比較多門課）
+let resultView = localStorage.getItem('resultViewPref') === 'list' ? 'list' : 'card';
+
+export function getResultView() {
+    return resultView;
+}
+
+export function setResultView(view) {
+    resultView = view === 'list' ? 'list' : 'card';
+    localStorage.setItem('resultViewPref', resultView);
+}
+
+/** 歷年中籤率徽章；沒有歷年資料時明說「無資料」而不是留白 */
+function acceptanceBadge(course) {
+    if (course.historical_acceptance_rate == null) {
+        return '<span class="badge bg-light text-muted border">無選上率資料</span>';
     }
-    
-    container.innerHTML = courses.map((course, index) => {
-        let saturationHtml = '';
-        if (course.historical_acceptance_rate != null) {
-            const satRate = parseFloat(course.historical_acceptance_rate);
-            const satPercent = (satRate * 100).toFixed(0);
-            const badgeClass = satRate < 0.5 ? 'bg-danger' : 'bg-success'; 
-            const icon = satRate < 0.5 ? '<i class="fas fa-fire me-1"></i>' : '';
-            
-            saturationHtml = `
-                <span class="badge ${badgeClass} border border-white shadow-sm" title="歷年平均選上率: ${satPercent}% (排除登記=0)">
-                    ${icon}選上率 ${satPercent}%
-                </span>`;
-        } else {
-            saturationHtml = `<span class="badge bg-light text-muted border">無選上率資料</span>`;
-        }
-        
-        const countHtml = `<small class="text-muted ms-auto"><i class="fas fa-user-friends me-1"></i>${course.選上人數}/${course.上限人數}</small>`;
+    const rate = parseFloat(course.historical_acceptance_rate);
+    const percent = (rate * 100).toFixed(0);
+    const cls = rate < 0.5 ? 'bg-danger' : 'bg-success';
+    const icon = rate < 0.5 ? '<i class="fas fa-fire me-1"></i>' : '';
+    return `<span class="badge ${cls}" title="歷年平均選上率：${percent}%（排除登記=0）">${icon}選上率 ${percent}%</span>`;
+}
+
+/**
+ * 推薦分數（0~100）與其組成。
+ * 把依據攤在 title 裡，避免給一個無從檢驗的黑箱數字。
+ */
+function scoreParts(course) {
+    const detail = course.score_detail;
+    if (course.recommend_score == null || !detail) return { html: '', reasons: '' };
+
+    const reasons = [
+        `選上機率 ${Math.round(detail.chance * 100)}%（依${detail.chance_source}）`,
+        detail.vacancy_seats > 0 ? `目前尚有 ${detail.vacancy_seats} 個名額` : '目前已額滿',
+        detail.credit_fit === 0 ? '學分超出剩餘目標額度' : null,
+        detail.has_conflict ? '與現有課表衝堂，已降權排序' : null,
+    ].filter(Boolean).join('；');
+
+    const tone = course.recommend_score >= 70 ? 'bg-success'
+        : (course.recommend_score >= 45 ? 'bg-warning text-dark' : 'bg-secondary');
+
+    return {
+        reasons,
+        html: `<span class="badge ${tone}" title="${reasons}" style="font-variant-numeric: tabular-nums;">
+                   <i class="fas fa-star me-1"></i>${course.recommend_score}
+               </span>`,
+    };
+}
+
+function courseTime(course) {
+    return (course.星期 && course.起始節次)
+        ? `週${course.星期} ${course.起始節次}-${course.結束節次}節`
+        : '時間未定';
+}
+
+/** 詳情／加入按鈕。extra 讓卡片檢視傳 flex-grow-1 把兩顆按鈕撐滿一列 */
+function actionButtons(index, isConflict, extra = '') {
+    return `
+        <button class="btn btn-sm btn-outline-primary ${extra}" onclick='showCourseDetailModal(${index})'>詳情</button>
+        ${isConflict
+            ? `<button class="btn btn-sm btn-secondary ${extra}" disabled>衝堂</button>`
+            : `<button class="btn btn-sm btn-primary ${extra}" onclick='addRecommendedCourseByIndex(${index})'>加入</button>`}`;
+}
+
+function renderResultCards(courses) {
+    // 條件列改成橫向後結果區是整個寬度，寬螢幕一排可以放到 4 張卡
+    return courses.map((course, index) => {
         const isConflict = checkTimeConflict(course).hasConflict;
-        const time = (course.星期 && course.起始節次) ? `週${course.星期} ${course.起始節次}-${course.結束節次}節` : '時間未定';
+        const score = scoreParts(course);
 
         return `
-            <div class="col-md-6 col-lg-4">
+            <div class="col-sm-6 col-lg-4 col-xxl-3">
                 <div class="card course-card h-100 ${isConflict ? 'border-danger' : 'border-0 shadow-sm'}">
                     ${isConflict ? '<div class="position-absolute top-0 start-0 m-2"><span class="badge bg-danger">衝堂</span></div>' : ''}
-                    
+
                     <div class="card-body d-flex flex-column p-3">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div class="d-flex justify-content-between align-items-start mb-2 gap-1">
                             <span class="badge bg-primary bg-opacity-10 text-primary">${course.學分}學分</span>
-                            ${saturationHtml}
+                            <div class="d-flex gap-1 flex-wrap justify-content-end">
+                                ${score.html}
+                                ${acceptanceBadge(course)}
+                            </div>
                         </div>
 
                         <h5 class="card-title fw-bold text-dark mb-1 text-truncate" title="${course.課程名稱}">
@@ -265,26 +313,171 @@ export function renderRecommendResults(courses) {
                         <div class="small text-muted mb-3">
                             ${course.教師姓名} <span class="mx-1">•</span> ${course.科系 || ''}
                         </div>
-                        
+
                         <div class="mt-auto">
                             <div class="d-flex align-items-center mb-3 text-secondary small">
-                                <i class="far fa-clock me-2"></i> ${time}
-                                ${countHtml}
+                                <i class="far fa-clock me-2"></i> ${courseTime(course)}
+                                <small class="text-muted ms-auto"><i class="fas fa-user-friends me-1"></i>${course.選上人數}/${course.上限人數}</small>
                             </div>
-                            
+
                             <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-primary flex-grow-1" onclick='showCourseDetailModal(${index})'>詳情</button>
-                                ${isConflict 
-                                    ? `<button class="btn btn-sm btn-secondary flex-grow-1" disabled>衝堂</button>` 
-                                    : `<button class="btn btn-sm btn-primary flex-grow-1" onclick='addRecommendedCourseByIndex(${index})'>加入</button>`
-                                }
+                                ${actionButtons(index, isConflict, 'flex-grow-1')}
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
+            </div>`;
     }).join('');
+}
+
+function renderResultList(courses) {
+    const rows = courses.map((course, index) => {
+        const isConflict = checkTimeConflict(course).hasConflict;
+        const score = scoreParts(course);
+        const seats = course.score_detail ? course.score_detail.vacancy_seats : null;
+
+        return `
+            <div class="course-row list-group-item px-3 py-2 ${isConflict ? 'is-conflict' : ''}">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <div class="course-score text-center" title="${score.reasons}">
+                        ${score.html || '<span class="text-muted small">—</span>'}
+                    </div>
+
+                    <div class="flex-grow-1" style="min-width: 14rem;">
+                        <div class="d-flex align-items-center flex-wrap gap-2">
+                            <span class="text-secondary small font-monospace">${course.課程代碼}</span>
+                            <span class="fw-bold">${course.課程名稱 || course.中文課程名稱}</span>
+                            ${isConflict ? '<span class="badge bg-danger">衝堂</span>' : ''}
+                        </div>
+                        <div class="small text-muted">
+                            ${course.教師姓名 || '未定'} <span class="mx-1">•</span>
+                            ${courseTime(course)} <span class="mx-1">•</span> ${course.學分} 學分
+                            ${course.上課地點 ? `<span class="mx-1">•</span> ${course.上課地點}` : ''}
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        ${acceptanceBadge(course)}
+                        ${seats != null
+                            ? (seats > 0
+                                ? `<span class="badge bg-success bg-opacity-75">尚有 ${seats} 名額</span>`
+                                : '<span class="badge bg-secondary">已額滿</span>')
+                            : ''}
+                        <span class="small text-muted" style="font-variant-numeric: tabular-nums;">
+                            ${course.選上人數}/${course.上限人數}
+                        </span>
+                        <div class="d-flex gap-1">${actionButtons(index, isConflict)}</div>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+
+    return `<div class="col-12"><div class="list-group list-group-flush border rounded overflow-hidden">${rows}</div></div>`;
+}
+
+export function renderCourseResults(courses, containerId = 'find-results') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (!courses || courses.length === 0) {
+        container.innerHTML = '<div class="col-12 text-center text-muted py-5">沒有找到符合條件的課程</div>';
+        return;
+    }
+
+    container.innerHTML = resultView === 'list'
+        ? renderResultList(courses)
+        : renderResultCards(courses);
+}
+
+/** 詳情視窗裡的推薦分數區塊：把分數拆成各項來源，而不是只給一個數字 */
+function detailScoreHtml(course) {
+    const rate = course.historical_acceptance_rate;
+    const detail = course.score_detail;
+    if (rate == null && !detail) return '';
+
+    const rows = [];
+    if (rate != null) {
+        rows.push(`<li>歷年中籤率 <strong>${Math.round(rate * 100)}%</strong>
+                   <span class="text-muted">（上限人數 ÷ 登記人數，只採計已完成分發的學期）</span></li>`);
+    }
+    if (detail) {
+        rows.push(`<li>選上機率推估 <strong>${Math.round(detail.chance * 100)}%</strong>
+                   <span class="text-muted">（依${detail.chance_source}）</span></li>`);
+        rows.push(detail.vacancy_seats > 0
+            ? `<li>目前尚有 <strong>${detail.vacancy_seats}</strong> 個名額</li>`
+            : '<li>目前登記人數已達或超過上限</li>');
+        if (detail.credit_fit === 0) {
+            rows.push('<li class="text-warning-emphasis">學分超出「目標學分 − 已選學分」的剩餘額度</li>');
+        }
+        if (detail.has_conflict) {
+            rows.push('<li class="text-danger">與現有課表衝堂，排序時已降權</li>');
+        }
+    }
+
+    const scoreBadge = course.recommend_score != null
+        ? `<span class="badge bg-primary ms-2">推薦分數 ${course.recommend_score}</span>` : '';
+
+    return `
+        <div class="col-12">
+            <div class="text-muted small mb-1">選課參考${scoreBadge}</div>
+            <ul class="small mb-0 ps-3 border-bottom pb-2">${rows.join('')}</ul>
+        </div>`;
+}
+
+/**
+ * 非同步載入這門課的歷年開課紀錄。
+ * 放在視窗開啟後才抓，避免每次渲染結果列表都預先打一堆 API。
+ */
+async function loadCourseHistory(course) {
+    const container = document.getElementById('course-detail-history');
+    if (!container) return;
+
+    const name = String(course.課程名稱 || '').trim();
+    if (!name) {
+        container.textContent = '沒有可查詢的課程名稱';
+        return;
+    }
+
+    try {
+        const data = await api.fetchHistory(name);
+        const teacher = String(course.教師姓名 || '').trim();
+        // 同名課可能有多位教師開課，優先只看同一位；沒有再退回全部同名課
+        let rows = (data.courses || []).filter(c => String(c.課程名稱 || '').trim() === name);
+        const sameTeacher = rows.filter(c => String(c.教師姓名 || '').trim() === teacher);
+        const usedTeacherFilter = teacher && sameTeacher.length > 0;
+        if (usedTeacherFilter) rows = sameTeacher;
+
+        if (!rows.length) {
+            container.textContent = '查無歷年開課紀錄';
+            return;
+        }
+
+        rows.sort((a, b) => (b.學年度 - a.學年度) || (b.學期 - a.學期));
+
+        container.innerHTML = `
+            ${usedTeacherFilter ? '' : '<div class="text-muted mb-1">找不到同一位教師的紀錄，以下為所有同名課程</div>'}
+            <div class="table-responsive" style="max-height: 12rem; overflow-y: auto;">
+                <table class="table table-sm mb-0" style="font-variant-numeric: tabular-nums;">
+                    <thead><tr>
+                        <th>學期</th><th>教師</th>
+                        <th class="text-end">登記</th><th class="text-end">選上</th><th class="text-end">上限</th>
+                    </tr></thead>
+                    <tbody>
+                        ${rows.slice(0, 12).map(r => `
+                            <tr>
+                                <td>${r.學年度}-${r.學期}</td>
+                                <td>${r.教師姓名 || '—'}</td>
+                                <td class="text-end">${r.登記人數}</td>
+                                <td class="text-end">${r.選上人數}</td>
+                                <td class="text-end">${r.上限人數}</td>
+                            </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+    } catch (error) {
+        console.error('載入歷年紀錄失敗', error);
+        container.textContent = '載入歷年紀錄失敗';
+    }
 }
 
 export function showCourseDetailModal(course) {
@@ -301,12 +494,14 @@ export function showCourseDetailModal(course) {
     
     const body = document.getElementById('courseDetailBody');
     
-    const syllabusUrl = course.教學大綱連結 || course['教學大綱連結'];
-    const syllabusLinkHtml = (syllabusUrl && syllabusUrl.includes('http')) 
-        ? `<a href="${syllabusUrl}" target="_blank" class="btn btn-sm btn-outline-primary w-100">
-             <i class="fas fa-external-link-alt me-1"></i>查看教學大綱
-           </a>` 
-        : '<span class="text-muted small">無連結</span>';
+    const syllabusUrl = course['教學大綱連結'];
+    // 115-1 有 1383/1963 門有大綱，其餘是學校端未上傳。明說原因，
+    // 避免使用者以為是本站抓不到而反覆點擊。
+    const syllabusLinkHtml = (syllabusUrl && String(syllabusUrl).includes('http'))
+        ? `<a href="${syllabusUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary w-100">
+             <i class="fas fa-file-pdf me-1"></i>開啟教學大綱（${course['教學大綱狀態'] || '中文'}）
+           </a>`
+        : '<span class="text-muted small"><i class="fas fa-circle-info me-1"></i>學校尚未上傳這門課的教學大綱</span>';
 
     const enrolled = parseFloat(course.選上人數 || 0);
     const capacity = parseFloat(course.上限人數 || 0);
@@ -397,6 +592,15 @@ export function showCourseDetailModal(course) {
                     <div>${syllabusLinkHtml}</div>
                 </div>
 
+                ${detailScoreHtml(course)}
+
+                <div class="col-12">
+                    <div class="text-muted small mb-1">歷年開課紀錄</div>
+                    <div id="course-detail-history" class="small text-muted">
+                        <span class="spinner-border spinner-border-sm me-2"></span>載入中…
+                    </div>
+                </div>
+
                 ${course.備註 ? `
                 <div class="col-12 mt-2">
                     <div class="alert alert-light border border-secondary border-opacity-25 mb-0 small">
@@ -407,6 +611,8 @@ export function showCourseDetailModal(course) {
             </div>
         </div>
     `;
+
+    loadCourseHistory(course);
     
     const addBtn = document.getElementById('btn-add-to-schedule');
     if (addBtn) {
@@ -436,45 +642,73 @@ export function switchTab(tabId) {
     if(activeBtn) activeBtn.classList.add('active');
 }
 
-export async function showConflictResolutionModal(newCourse, oldCourse) {
-    const formatTime = (c) => `週${c.星期} ${c.起始節次}-${c.結束節次}節`;
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
+/**
+ * 批次衝堂處理：把所有衝突的課程集中成一張列表讓使用者一次決定，
+ * 取代逐門跳出視窗（一門跨多節的課甚至會連跳好幾次）。
+ *
+ * @param {Array<{course: Object, conflicts: Array<Object>}>} items
+ * @returns {Promise<number[]|null>} 要改選的項目索引；null 代表全部略過
+ */
+export async function showBatchConflictResolutionModal(items) {
+    const formatTime = (c) => `週${escapeHtml(c.星期)} ${escapeHtml(c.起始節次)}-${escapeHtml(c.結束節次)}節`;
+
+    const rows = items.map((item, idx) => {
+        const c = item.course;
+        const clashes = item.conflicts.map(o => `
+            <div class="small text-danger">
+                <i class="fas fa-times-circle me-1"></i>會移除：${escapeHtml(o.課程名稱)}
+                <span class="text-muted">${escapeHtml(o.教師姓名)}・${formatTime(o)}</span>
+            </div>`).join('');
+
+        return `
+            <label class="list-group-item d-flex gap-2 align-items-start text-start" style="cursor:pointer;">
+                <input class="form-check-input mt-1 flex-shrink-0 conflict-choice" type="checkbox" value="${idx}">
+                <span class="flex-grow-1">
+                    <span class="fw-semibold">${escapeHtml(c.課程名稱)}</span>
+                    <span class="small text-muted ms-1">${escapeHtml(c.教師姓名)}・${formatTime(c)}</span>
+                    ${clashes}
+                </span>
+            </label>`;
+    }).join('');
 
     const result = await Swal.fire({
-        title: '課程時間衝突',
+        title: `${items.length} 門課程衝堂`,
         html: `
-            <div class="mb-3">同一時段只能選擇一門課程，請選擇您要保留的課程：</div>
-            <div class="row g-2">
-                <div class="col-6">
-                    <div class="card h-100 border-secondary">
-                        <div class="card-header bg-secondary text-white small">原本的課程 (已在課表)</div>
-                        <div class="card-body p-2 text-start">
-                            <h6 class="card-title text-truncate mb-1" title="${oldCourse.課程名稱}">${oldCourse.課程名稱}</h6>
-                            <p class="small text-muted mb-1">${oldCourse.教師姓名}</p>
-                            <p class="small text-muted mb-0">${formatTime(oldCourse)}</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="card h-100 border-primary">
-                        <div class="card-header bg-primary text-white small">準備導入的新課程</div>
-                        <div class="card-body p-2 text-start">
-                            <h6 class="card-title text-truncate mb-1" title="${newCourse.課程名稱}">${newCourse.課程名稱}</h6>
-                            <p class="small text-muted mb-1">${newCourse.教師姓名}</p>
-                            <p class="small text-muted mb-0">${formatTime(newCourse)}</p>
-                        </div>
-                    </div>
-                </div>
+            <p class="small text-muted text-start mb-2">
+                勾選要<b>改選</b>的課程，未勾選者將保留課表上的原課程。
+            </p>
+            <div class="d-flex gap-2 mb-2">
+                <button type="button" id="conflict-select-all" class="btn btn-sm btn-outline-primary">全部改選</button>
+                <button type="button" id="conflict-select-none" class="btn btn-sm btn-outline-secondary">全部保留</button>
             </div>
+            <div class="list-group text-start" style="max-height:45vh; overflow-y:auto;">${rows}</div>
         `,
-        icon: 'question',
+        width: '42rem',
         showCancelButton: true,
-        confirmButtonText: '改選新課程',
-        confirmButtonColor: '#0d6efd', 
-        cancelButtonText: '保留原課程',
-        cancelButtonColor: '#6c757d', 
-        reverseButtons: true, 
-        allowOutsideClick: false
+        confirmButtonText: '套用',
+        confirmButtonColor: '#0d6efd',
+        cancelButtonText: '全部略過',
+        cancelButtonColor: '#6c757d',
+        reverseButtons: true,
+        allowOutsideClick: false,
+        didOpen: () => {
+            const popup = Swal.getPopup();
+            const boxes = () => popup.querySelectorAll('.conflict-choice');
+            popup.querySelector('#conflict-select-all')
+                .addEventListener('click', () => boxes().forEach(b => { b.checked = true; }));
+            popup.querySelector('#conflict-select-none')
+                .addEventListener('click', () => boxes().forEach(b => { b.checked = false; }));
+        },
+        preConfirm: () => Array.from(
+            Swal.getPopup().querySelectorAll('.conflict-choice:checked')
+        ).map(b => parseInt(b.value))
     });
 
-    return result.isConfirmed ? 'replace' : 'keep';
+    return result.isConfirmed ? (result.value || []) : null;
 }

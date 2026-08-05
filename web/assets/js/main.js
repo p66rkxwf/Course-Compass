@@ -1,11 +1,17 @@
 import * as config from './config.js';
-import { state, saveToLocalStorage, loadFromLocalStorage } from './state.js';
+import { state, saveToLocalStorage, loadFromLocalStorage, isSettledSemester, isCurrentSemesterPending } from './state.js';
 import * as api from './api.js';
 import * as utils from './utils.js';
 import * as ui from './ui.js';
+import * as find from './find.js';
+import * as dashboard from './dashboard.js';
+import * as vacancy from './vacancy.js';
 
 let historyGroupsCache = [];
 let historyChartInstance = null;
+
+// /api/filters 的回傳（學制、學院、通識分類…），推薦頁與搜尋頁共用
+let filterOptions = null;
 
 function initSelect2(id) {
     if (typeof jQuery === 'undefined' || !jQuery.fn.select2) return;
@@ -32,11 +38,18 @@ document.addEventListener('DOMContentLoaded', initializeApp);
 
 async function initializeApp() {
     ui.initializeScheduleTable();
-    initSettings(); 
+    initSettings();
+    await loadSemesters();
     await loadCoursesData();
     populateCollegeSelect();
     initSystemAndLevelSelects();
     await loadDepartments();
+    await loadFilterOptions();
+    // 系所是可不選的篩選條件，一開始就列出全部，不強迫先選學院
+    await loadDepartmentsByCollege('', 'find-dept', '全部系所');
+    find.bindEvents();
+    dashboard.initDashboard();
+    vacancy.initVacancy();
     setupEventListeners();
     loadFromLocalStorage();
     cleanupSelectedCourses();
@@ -52,7 +65,7 @@ async function initializeApp() {
 
     window.addEventListener('resize', debounce(detectAndApplyScheduleView, 200));
     detectAndApplyScheduleView();
-    ['select-year', 'select-semester', 'select-college', 'select-grade', 'select-grade-schedule', 'select-class-schedule', 'select-department-schedule'].forEach(id => initSelect2(id));
+    ['select-year', 'select-semester', 'find-college', 'find-grade', 'select-grade-schedule', 'select-class-schedule', 'select-department-schedule'].forEach(id => initSelect2(id));
 }
 
 // 設定功能邏輯：主題、視圖、重置
@@ -122,6 +135,36 @@ function initSettings() {
     }
 }
 
+/**
+ * 取一次 /api/filters，推薦頁與搜尋頁共用。
+ * 選項來自資料本身（部別、課程性質…），新學期多出新類別時前端不必改。
+ */
+async function loadFilterOptions() {
+    try {
+        filterOptions = await api.fetchFilterOptions(state.currentYear, state.currentSemester);
+    } catch (error) {
+        console.error('載入篩選選項失敗', error);
+        filterOptions = null;
+        return;
+    }
+
+    await find.initFilters(filterOptions);
+}
+
+/**
+ * 換學期後，篩選選項（各類別的門數）與統計都要重算。
+ * 儀表板只作廢快取、不立刻重打 API，等使用者真的切到那個分頁才載入。
+ */
+async function onSemesterChanged() {
+    dashboard.invalidateDashboard();
+    await loadFilterOptions();
+    const dashboardTab = document.getElementById('tab-dashboard');
+    if (dashboardTab && !dashboardTab.classList.contains('d-none')) {
+        dashboard.loadDashboard(true);
+    }
+}
+
+
 function cleanupSelectedCourses() {
     if (!state.selectedCourses || state.selectedCourses.length === 0) return;
     const unique = [];
@@ -143,6 +186,75 @@ function cleanupSelectedCourses() {
     }
 }
 
+// 學年度/學期選單改由 API 動態產生，新學期上線後前端不必再改死值
+async function loadSemesters() {
+    try {
+        const data = await api.fetchSemesters();
+        state.semesters = data.semesters || [];
+    } catch (error) {
+        console.error('載入學期列表失敗，改用預設值', error);
+        state.semesters = [];
+    }
+
+    if (state.semesters.length > 0) {
+        const latest = state.semesters[0];
+        state.currentYear = latest.year;
+        state.currentSemester = latest.semester;
+    }
+
+    populateSemesterSelects();
+}
+
+function populateSemesterSelects() {
+    const yearSelect = document.getElementById('select-year');
+    const semesterSelect = document.getElementById('select-semester');
+    if (!yearSelect || !semesterSelect || state.semesters.length === 0) return;
+
+    const years = [...new Set(state.semesters.map(s => s.year))].sort((a, b) => b - a);
+    yearSelect.innerHTML = years
+        .map(y => `<option value="${y}">${y}學年度</option>`)
+        .join('');
+    yearSelect.value = state.currentYear;
+
+    populateSemesterOptions();
+}
+
+// 只列出該學年度實際有資料的學期
+function populateSemesterOptions() {
+    const semesterSelect = document.getElementById('select-semester');
+    if (!semesterSelect) return;
+
+    const available = state.semesters
+        .filter(s => String(s.year) === String(state.currentYear))
+        .map(s => s.semester)
+        .sort((a, b) => a - b);
+
+    if (available.length === 0) return;
+
+    semesterSelect.innerHTML = available
+        .map(s => `<option value="${s}">第${s}學期</option>`)
+        .join('');
+
+    if (!available.includes(state.currentSemester)) {
+        state.currentSemester = available[available.length - 1];
+    }
+    semesterSelect.value = state.currentSemester;
+}
+
+// 預選登記中的學期，選上人數尚未公布，需明確告知使用者
+function updatePendingSemesterNotice() {
+    const notice = document.getElementById('pending-semester-notice');
+    if (!notice) return;
+
+    if (isCurrentSemesterPending()) {
+        notice.classList.remove('d-none');
+        notice.querySelector('.pending-semester-text').textContent =
+            `${state.currentYear} 學年度第 ${state.currentSemester} 學期尚在預選登記中，選上人數與中籤率皆未公布，目前僅顯示上限與登記人數。`;
+    } else {
+        notice.classList.add('d-none');
+    }
+}
+
 async function loadCoursesData() {
     try {
         const data = await api.fetchAllCourses(state.currentYear, state.currentSemester);
@@ -150,6 +262,7 @@ async function loadCoursesData() {
         console.log(`載入 ${state.allCoursesData.length} 門課程`);
         populateCollegeSelect();
         initSystemAndLevelSelects();
+        updatePendingSemesterNotice();
     } catch (error) {
         console.error(error);
         ui.showAlert('載入課程數據失敗', 'danger');
@@ -217,20 +330,25 @@ async function loadDepartments() {
     try {
         const data = await api.fetchDepartments(state.currentYear, state.currentSemester);
         const departments = data.departments || [];
-        const select = document.getElementById('select-dept-recommend'); 
+        const select = document.getElementById('find-dept');
         if (select) {
             select.innerHTML = '<option value="">選擇系所</option>';
             departments.forEach(dept => {
                 select.add(new Option(dept, dept));
             });
         }
-        initSelect2('select-dept-recommend');
+        initSelect2('find-dept');
     } catch (error) {
         console.error('載入系所列表失敗:', error);
     }
 }
 
-async function loadDepartmentsByCollege(college, targetSelectId) {
+/**
+ * 填入某學院底下的系所清單。
+ * placeholder 由呼叫端指定：找課頁的系所是「可不選」的篩選條件（全部系所），
+ * 課表頁的科系則是導入班級的必填步驟（選擇科系），兩者語意不同。
+ */
+async function loadDepartmentsByCollege(college, targetSelectId, placeholder = '選擇科系') {
     try {
         if (state.allCoursesData.length === 0) await loadCoursesData();
         const departments = new Set();
@@ -246,7 +364,7 @@ async function loadDepartmentsByCollege(college, targetSelectId) {
 
         const select = document.getElementById(targetSelectId);
         if (select) {
-            select.innerHTML = '<option value="">選擇科系</option>';
+            select.innerHTML = `<option value="">${placeholder}</option>`;
             Array.from(departments).sort().forEach(dept => {
                 select.add(new Option(dept, dept));
             });
@@ -446,37 +564,62 @@ async function handleImportCourses() {
         await new Promise(r => setTimeout(r, 200));
         let addedCount = 0;
         let skippedCount = 0;
+        let unresolvedCount = 0;
 
+        // 第一輪：先把不衝堂的課程全部加入，並蒐集衝堂的課程
+        const conflictItems = [];
         for (const rawCourse of uniqueTargets) {
             const course = utils.normalizeCourse(rawCourse);
             if (utils.isCourseSelected(course)) {
                 skippedCount++;
                 continue;
             }
-            let resolved = false;
-            while (!resolved) {
-                const check = utils.checkTimeConflict(course);
-                if (!check.hasConflict) {
-                    utils.addCourseToState(course);
-                    addedCount++;
-                    resolved = true;
-                } else {
-                    const existingCourse = check.conflictingCourse;
-                    const userChoice = await ui.showConflictResolutionModal(course, existingCourse);
-                    if (userChoice === 'replace') {
-                        utils.removeCourseFromState(existingCourse.課程代碼, existingCourse.序號);
-                    } else {
-                        skippedCount++;
-                        resolved = true; 
-                    }
-                }
+
+            const { conflicts } = utils.findConflictingCourses(course);
+            if (conflicts.length === 0) {
+                utils.addCourseToState(course);
+                addedCount++;
+            } else {
+                conflictItems.push({ course, conflicts });
             }
         }
+
+        // 第二輪：所有衝堂集中成一張列表，一次決定，不再逐門跳視窗
+        if (conflictItems.length > 0) {
+            const chosen = await ui.showBatchConflictResolutionModal(conflictItems);
+
+            if (chosen === null) {
+                skippedCount += conflictItems.length;
+            } else {
+                const chosenSet = new Set(chosen);
+                conflictItems.forEach((item, idx) => {
+                    if (!chosenSet.has(idx)) {
+                        skippedCount++;
+                        return;
+                    }
+                    item.conflicts.forEach(o => utils.removeCourseFromState(o.課程代碼, o.序號));
+                    // 兩門都被勾選的新課彼此衝堂時，後者仍會加不進去
+                    if (utils.addCourseToState(item.course) === true) {
+                        addedCount++;
+                    } else {
+                        unresolvedCount++;
+                    }
+                });
+            }
+        }
+
         ui.updateScheduleDisplay();
         ui.updateSelectedCoursesList();
         saveToLocalStorage();
+
+        const notes = [];
+        if (skippedCount > 0) notes.push(`略過 ${skippedCount} 門`);
+        if (unresolvedCount > 0) notes.push(`${unresolvedCount} 門因與其他新課程衝堂而未加入`);
+
         if (addedCount > 0) {
-            ui.showAlert(`成功導入 ${addedCount} 門課程${skippedCount > 0 ? ` (略過 ${skippedCount} 門)` : ''}`, 'success');
+            ui.showAlert(`成功導入 ${addedCount} 門課程${notes.length ? ` (${notes.join('、')})` : ''}`, 'success');
+        } else if (unresolvedCount > 0) {
+            ui.showAlert(`未導入任何課程：${unresolvedCount} 門新課程彼此衝堂`, 'warning');
         } else {
             ui.showAlert('未導入任何新課程 (皆已存在或選擇略過)', 'info');
         }
@@ -507,144 +650,6 @@ function handleClearSchedule() {
             ui.showAlert('課表已清空', 'info');
         }
     });
-}
-
-async function handleSearchRecommend() {
-    const emptySlotsOnly = document.getElementById('check-empty-slots').checked;
-    const selectedDays = Array.from(document.querySelectorAll('.day-filter:checked')).map(cb => cb.value);
-
-    if (selectedDays.length === 0) {
-        ui.showAlert('請至少選擇一天', 'warning');
-        return;
-    }
-
-    const targetCredits = 99; 
-    const activeCategory = document.querySelector('.category-btn.active');
-    const category = activeCategory ? activeCategory.dataset.category : '核心通識';
-    const userCollege = document.getElementById('select-college-schedule').value;
-    
-    let searchCollege = document.getElementById('select-college').value;
-    let searchDept = document.getElementById('select-dept-recommend') ? document.getElementById('select-dept-recommend').value : null;
-    
-    let rawGradeVal = document.getElementById('select-grade').value;
-    let searchLevel = null;
-    let searchGrade = null;
-
-    if (rawGradeVal && rawGradeVal.includes('|')) {
-        const parts = rawGradeVal.split('|');
-        searchLevel = parts[0];
-        searchGrade = parts[1];
-    } else {
-        searchGrade = rawGradeVal;
-    }
-
-    const isGlobalCategory = [
-        '核心通識', '精進中文', '精進英外文', 
-        '教育學程', '大二體育', '大三、四體育'
-    ].includes(category);
-
-    if (isGlobalCategory) {
-        searchCollege = null;
-        searchDept = null;
-        searchGrade = null;
-    }
-
-    if (category === '系外選修' && !searchCollege && !searchDept) {
-        ui.showAlert('請選擇「系外選修」的目標學院或科系', 'warning');
-        return;
-    }
-
-    let searchYear = state.currentYear;
-    let searchSemester = state.currentSemester;
-    if (state.selectedCourses.length > 0) {
-        const firstCourse = state.selectedCourses[0];
-        if (firstCourse.學年度 && firstCourse.學期) {
-            searchYear = parseInt(firstCourse.學年度);
-            searchSemester = parseInt(firstCourse.學期);
-        }
-    }
-
-    const btn = document.getElementById('btn-search-recommend');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>搜尋中...';
-
-    try {        
-        let apiCategory = category;
-        
-        const payload = {
-            empty_slots: emptySlotsOnly ? utils.getEmptySlots() : null,
-            target_credits: targetCredits, 
-            category: apiCategory,
-            college: searchCollege || null,
-            department: searchDept || null,
-            grade: searchGrade || null,
-            level: searchLevel || null,
-            current_courses: state.selectedCourses.map(c => ({ code: c.課程代碼, serial: c.序號 })),
-            year: searchYear,
-            semester: searchSemester,
-            preferred_days: selectedDays
-        };
-        
-        const data = await api.fetchRecommendations(payload);
-        let rawCourses = (data.courses || []).map(c => utils.normalizeCourse ? utils.normalizeCourse(c) : c);
-        
-        const uniqueCourses = [];
-        const seen = new Set();
-        rawCourses.forEach(c => {
-            const code = String(c.課程代碼 || '').trim();
-            const serial = String(c.序號 || '').trim();
-            let key = '';
-            if (code && serial) key = `${code}_${serial}`;
-            else key = `${String(c.課程名稱).trim()}_${String(c.教師姓名).trim()}_${c.星期}_${c.起始節次}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                uniqueCourses.push(c);
-            }
-        });
-        let courses = uniqueCourses;
-
-        if (['核心通識', '精進中文', '精進英外文', '教育學程', '大二體育', '大三、四體育'].includes(category)) {
-            courses = courses.filter(c => {
-                const classType = c['開課班別(代表)'] || c.開課班別 || '';
-                return classType.includes(category);
-            });
-            if (category === '核心通識' && userCollege) {
-                courses = courses.filter(c => c.學院 !== userCollege);
-            }
-        }
-        
-        const dayMap = {'1':'一', '2':'二', '3':'三', '4':'四', '5':'五', '6':'六', '7':'日'};
-        courses = courses.filter(course => {
-            const cDay = String(course.星期);
-            const isMatchNumeric = selectedDays.includes(cDay);
-            const isMatchChinese = selectedDays.some(d => dayMap[d] === cDay);
-            return isMatchNumeric || isMatchChinese;
-        });
-
-        // 空堂過濾
-        if (emptySlotsOnly) {
-            courses = courses.filter(course => {
-                const check = utils.checkTimeConflict(course);
-                return !check.hasConflict; 
-            });
-        }
-
-        state.recommendedCourses = courses;
-        ui.renderRecommendResults(state.recommendedCourses);
-        
-        if (courses.length > 0) {
-             ui.showAlert(`為您找到 ${state.recommendedCourses.length} 門推薦課程`, 'success');
-        } else {
-             ui.showAlert('沒有找到符合條件的課程，請嘗試放寬條件', 'warning');
-        }
-
-    } catch (error) {
-        console.error(error);
-        ui.showAlert(error.message || '推薦失敗，請稍後再試', 'danger');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-search me-2"></i> 開始推薦';
-    }
 }
 
 async function handleSearchHistory() {
@@ -725,9 +730,14 @@ function openHistoryModal(index) {
                </a>`
             : `<span class="text-muted small">-</span>`;
 
-        const statusBadge = rate >= 100 
-            ? `<span class="badge bg-danger rounded-pill">${enrolled}/${capacity}</span>`
-            : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill">${enrolled}/${capacity}</span>`;
+        // 預選登記中的學期選上人數尚未公布，顯示 0/上限 會被誤讀為「沒人選上」
+        const pending = !isSettledSemester(c.學年度, c.學期);
+        const statusBadge = pending
+            ? `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 rounded-pill"
+                     title="此學期尚在預選登記中，選上人數未公布">預選中 / ${capacity}</span>`
+            : rate >= 100
+                ? `<span class="badge bg-danger rounded-pill">${enrolled}/${capacity}</span>`
+                : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill">${enrolled}/${capacity}</span>`;
 
         const registeredDisplay = registered > 0
             ? `${registered}`
@@ -800,8 +810,11 @@ function renderHistoryChart(data) {
     if (historyChartInstance) {
         historyChartInstance.destroy();
     }
-    const labels = data.map(d => `${d.學年度}-${d.學期}`);
-    const enrolledData = data.map(d => d.選上人數 || 0);
+    // 預選登記中的學期選上人數為 0，直接畫成歸零柱狀看起來像資料錯誤，
+    // 因此改以半透明呈現並在 tooltip 註明狀態
+    const pendingFlags = data.map(d => !isSettledSemester(d.學年度, d.學期));
+    const labels = data.map((d, i) => `${d.學年度}-${d.學期}${pendingFlags[i] ? ' (預選中)' : ''}`);
+    const enrolledData = data.map((d, i) => pendingFlags[i] ? null : (d.選上人數 || 0));
     const capacityData = data.map(d => d.上限人數 || 0);
     const registeredData = data.map(d => d.登記人數 || 0);
 
@@ -840,7 +853,9 @@ function renderHistoryChart(data) {
                     type: 'bar',  // 上限人數使用直條圖
                     label: '上限人數',
                     data: capacityData,
-                    backgroundColor: 'rgba(220, 53, 69, 0.3)',
+                    backgroundColor: pendingFlags.map(
+                        p => p ? 'rgba(220, 53, 69, 0.12)' : 'rgba(220, 53, 69, 0.3)'
+                    ),
                     borderColor: '#dc3545',
                     borderWidth: 1,
                     borderDash: [5, 5],
@@ -865,6 +880,14 @@ function renderHistoryChart(data) {
                     filter: function(tooltipItem) {
                         // 確保tooltip按照指定順序顯示：登記人數、選上人數、上限人數
                         return true;
+                    },
+                    callbacks: {
+                        afterBody: function(items) {
+                            if (items.length && pendingFlags[items[0].dataIndex]) {
+                                return '\n⏳ 此學期尚在預選登記中，選上人數未公布';
+                            }
+                            return '';
+                        }
                     },
                     itemSort: function(a, b) {
                         // 自定義排序：確保登記人數顯示在選上人數上面
@@ -971,8 +994,11 @@ function displayHistoryResults(courses, query) {
         const getStats = (group) => {
             let sRateSum = 0, sSatSum = 0, vCount = 0;
             group.data.forEach(item => {
+                // 預選登記中的學期登記人數仍在累積，納入會讓中籤率偏樂觀
+                if (!isSettledSemester(item.學年度, item.學期)) return;
+
                 const reg = parseFloat(item.登記人數 || 0);
-                const limit = parseFloat(item.上限人數 || 0); 
+                const limit = parseFloat(item.上限人數 || 0);
 
                 if (reg > 0 && limit > 0) {
                     let rate = limit / reg;
@@ -1010,6 +1036,9 @@ function displayHistoryResults(courses, query) {
             let validCount = 0;
 
             group.data.forEach(item => {
+                // 同上：排除仍在預選登記中、人數尚未結算的學期
+                if (!isSettledSemester(item.學年度, item.學期)) return;
+
                 const reg = parseFloat(item.登記人數 || 0);
                 const limit = parseFloat(item.上限人數 || 0);
 
@@ -1096,7 +1125,11 @@ function displayHistoryResults(courses, query) {
 }
 
 function exposeGlobalFunctions() {
-    window.switchTab = ui.switchTab;
+    // 統計儀表板改成進入分頁時才載入，避免每次開啟網站都多打一支較重的 API
+    window.switchTab = (tabId) => {
+        ui.switchTab(tabId);
+        if (tabId === 'tab-dashboard') dashboard.loadDashboard();
+    };
     
     window.toggleSidebar = () => {
         const sidebar = document.querySelector('.sidebar');
@@ -1152,6 +1185,7 @@ function exposeGlobalFunctions() {
                 if (utils.removeCourseFromState(code, serial)) {
                     ui.updateScheduleDisplay();
                     ui.updateSelectedCoursesList();
+                    find.refresh();
                     saveToLocalStorage();
                     ui.showAlert('課程已移除', 'info');
                 }
@@ -1176,9 +1210,11 @@ function exposeGlobalFunctions() {
         if (result === true) {
             ui.updateScheduleDisplay();
             ui.updateSelectedCoursesList();
+            // 課表變了，查詢結果的衝堂標記與「加入」按鈕狀態要跟著重畫
+            find.refresh();
             saveToLocalStorage();
             const rawTotal = state.selectedCourses.reduce((sum, c) => sum + (parseFloat(c.學分) || 0), 0);
-            const target = parseFloat(document.getElementById('range-credits').value) || 0;
+            const target = parseFloat(document.getElementById('find-target-credits')?.value) || 0;
             if (rawTotal > target) {
                  ui.showAlert(`課程已加入，但總學分(${rawTotal})已超過目標(${target})`, 'warning');
             } else {
@@ -1216,17 +1252,17 @@ function detectAndApplyScheduleView() {
     ui.updateScheduleDisplay();
 }
 
-function updateRecommendGradeList() {
-    const college = document.getElementById('select-college').value;
-    const dept = document.getElementById('select-dept-recommend').value;
-    const select = document.getElementById('select-grade');
+function updateFindGradeList() {
+    const college = document.getElementById('find-college').value;
+    const dept = document.getElementById('find-dept').value;
+    const select = document.getElementById('find-grade');
     
     // 預設選項
     let html = '<option value="">全部年級</option>';
     
     if (!state.allCoursesData || state.allCoursesData.length === 0) {
         select.innerHTML = html;
-        initSelect2('select-grade');
+        initSelect2('find-grade');
         return;
     }
 
@@ -1279,7 +1315,7 @@ function updateRecommendGradeList() {
     html += buildGroup('博士班');
 
     select.innerHTML = html;
-    initSelect2('select-grade');
+    initSelect2('find-grade');
 }
 
 function setupEventListeners() {
@@ -1294,7 +1330,6 @@ function setupEventListeners() {
 
     document.getElementById('btn-import').addEventListener('click', handleImportCourses);
     document.getElementById('btn-clear').addEventListener('click', handleClearSchedule);
-    document.getElementById('btn-search-recommend').addEventListener('click', handleSearchRecommend);
     document.getElementById('btn-search-history').addEventListener('click', handleSearchHistory);
     document.getElementById('search-history-input').addEventListener('keypress', e => {
         if (e.key === 'Enter') handleSearchHistory();
@@ -1302,20 +1337,25 @@ function setupEventListeners() {
 
     document.getElementById('select-year').addEventListener('change', function() {
         state.currentYear = parseInt(this.value);
+        // 各學年度開放的學期不一定相同（例如最新學年可能只有第一學期）
+        populateSemesterOptions();
+        initSelect2('select-semester');
         loadCoursesData();
+        onSemesterChanged();
     });
     document.getElementById('select-semester').addEventListener('change', function() {
         state.currentSemester = parseInt(this.value);
         loadCoursesData();
+        onSemesterChanged();
     });
 
-    jQuery('#select-college').on('change', function() {
-        loadDepartmentsByCollege(this.value, 'select-dept-recommend');
-        updateRecommendGradeList();
+    jQuery('#find-college').on('change', function() {
+        loadDepartmentsByCollege(this.value, 'find-dept', '全部系所');
+        updateFindGradeList();
     });
 
-    jQuery('#select-dept-recommend').on('change', function() {
-        updateRecommendGradeList();
+    jQuery('#find-dept').on('change', function() {
+        updateFindGradeList();
     });
 
     const updateGradeHandler = () => {
@@ -1358,22 +1398,4 @@ function setupEventListeners() {
         }
     });
 
-    const rangeCredits = document.getElementById('range-credits');
-    if (rangeCredits) {
-        rangeCredits.addEventListener('input', function() {
-            document.getElementById('target-credits').textContent = this.value;
-        });
-    }
-    
-    document.querySelectorAll('.category-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('.category-btn').forEach(b => {
-                b.classList.remove('active', 'btn-primary');
-                b.classList.add('btn-outline-primary');
-            });
-            this.classList.remove('btn-outline-primary');
-            this.classList.add('active', 'btn-primary');
-            handleSearchRecommend();
-        });
-    });
 }

@@ -800,6 +800,87 @@ span.badge.bg-danger {
 }
 
 /* =========================================
+   7.5 查詢條件區 (Filter grid)
+   ========================================= */
+
+/* 條件欄位排成固定寬度網格（手機 2 欄、平板 3 欄、桌機 4 欄），
+   由 Bootstrap 的 col-6 col-md-4 col-xl-3 控制，這裡只補齊細節。 */
+
+/* 星期／通識子類 chip 統一寬度，避免一列裡寬窄參差 */
+#tab-find .btn-check + .btn-sm {
+    min-width: 2.4rem;
+}
+
+/* 找課頁的學院／系所／年級由 Select2 接管，其餘是原生 form-select-sm。
+   select2-bootstrap-5-theme 本來就有 `.form-select-sm ~ .select2-container` 的縮小規則，
+   但本專案在「表單控制項」那段用 !important 覆寫了 .select2-selection 的邊框與底色，
+   容易和主題規則打架而顯得高低不一。這裡明確指定一次，讓兩種選單完全等高等字級。 */
+#tab-find .select2-container--bootstrap-5 .select2-selection {
+    min-height: calc(1.5em + 0.5rem + 2px);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    border-radius: var(--border-radius-md) !important;
+}
+
+#tab-find .select2-container--bootstrap-5 .select2-selection--single {
+    padding: 0.25rem 2.25rem 0.25rem 0.5rem;
+}
+
+#tab-find .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+    padding: 0;
+    line-height: 1.5;
+}
+
+/* 底部工具條：開關與動作按鈕收在一條淺底列，與上方的選單網格明確分開。
+   混排時開關的文字寬度不一，跟等寬選單並列會顯得參差，分開就各自對齊。 */
+.find-toolbar {
+    background: var(--bg-muted);
+    border-radius: var(--border-radius-md);
+    padding: 0.6rem 0.85rem;
+}
+
+/* 未套用的條件轉灰。
+   每個篩選選單的第一個選項都是「全部／不限」（value=""），選著它就代表沒有套用；
+   顯示成灰色，使用者掃一眼就知道哪幾個條件實際生效，不必逐一展開確認。
+
+   兩個實作細節：
+   1. 必須加 !important——上面「表單控制項」用了
+      `.form-select { color: var(--text-main) !important; }`，不加蓋不過去。
+   2. 灰色沿用既有 ::placeholder 的 #94a3b8，而不是另外挑一個顏色。
+      Select2 接管的選單（學院、年級）已經是這個灰，兩者用同一色才不會一深一淺。 */
+.form-select:has(option[value=""]:checked) {
+    color: #94a3b8 !important;
+}
+
+/* 選單展開時，「全部／不限」那一項也是灰的，其餘維持正常文字色 */
+.form-select option {
+    color: var(--text-main);
+}
+
+.form-select option[value=""] {
+    color: #94a3b8;
+}
+
+/* 推薦結果列表檢視：一列一門課，密度高，適合快速比較 */
+.course-row {
+    border-left: 3px solid transparent;
+    transition: var(--transition-base);
+}
+
+.course-row:hover {
+    background: var(--bg-muted);
+}
+
+.course-row.is-conflict {
+    border-left-color: #CB4042;
+}
+
+.course-score {
+    min-width: 3.2rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* =========================================
    8. 響應式設定 (Responsive)
    ========================================= */
 @media (max-width: 768px) {
