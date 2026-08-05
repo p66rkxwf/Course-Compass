@@ -27,6 +27,13 @@ def main():
         default="INFO",
         help="日誌級別"
     )
+    parser.add_argument(
+        "--latest",
+        type=int,
+        default=None,
+        metavar="N",
+        help="爬蟲只抓最後 N 個學期（過去學期資料已凍結，排程更新建議用 --latest 2）"
+    )
 
     args = parser.parse_args()
 
@@ -35,7 +42,7 @@ def main():
 
     if args.command == "crawl":
         from crawler.crawler import main as crawl_main
-        crawl_main()
+        crawl_main(only_latest=args.latest)
 
     elif args.command == "process":
         from processor.data_processor import main as process_main
@@ -54,7 +61,7 @@ def main():
         try:
             print("1. 爬取課程數據...")
             from crawler.crawler import main as crawl_main
-            crawl_main()
+            crawl_main(only_latest=args.latest)
 
             print("2. 構建教師字典...")
             from processor.teacher_dict_builder import main as dict_main

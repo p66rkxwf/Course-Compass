@@ -1,85 +1,126 @@
+"""NCUE 課程缺額監控 - 偵測目標課程出現空位時以 LINE 推播通知。
+
+請求與解析邏輯共用主專案的 src/crawler/ncue_client.py，避免兩份實作各自失準。
+"""
+
+import sys
+import json
+from pathlib import Path
+
 import requests
-from bs4 import BeautifulSoup
-import config
+
+# 共用主專案的爬蟲底層（純 requests + bs4，不會拉進 pandas）。
+# 注意：設定檔命名為 monitor_config 而非 config，因為 src/config.py 會蓋掉同名模組。
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from crawler.ncue_client import (  # noqa: E402
+    build_session, fetch_course_table, parse_course_table, find_column_index
+)
+
+import monitor_config as config  # noqa: E402
+
 
 def send_line_message(message):
-    if not config.LINE_TOKEN or not config.LINE_USER_ID: return
+    if not config.LINE_TOKEN or not config.LINE_USER_ID:
+        print("⚠️ 未設定 LINE_CHANNEL_ACCESS_TOKEN / LINE_USER_ID，略過推播")
+        return False
+
     url = "https://api.line.me/v2/bot/message/push"
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {config.LINE_TOKEN}"}
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {config.LINE_TOKEN}",
+    }
     payload = {"to": config.LINE_USER_ID, "messages": [{"type": "text", "text": message}]}
-    requests.post(url, headers=headers, json=payload)
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=config.REQUEST_TIMEOUT)
+    if resp.status_code != 200:
+        print(f"❌ LINE 推播失敗 ({resp.status_code}): {resp.text}")
+        return False
+
+    print("📨 已發送 LINE 通知")
+    return True
+
+
+def load_state():
+    try:
+        with open(config.STATE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_state(state):
+    with open(config.STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def to_int(value):
+    text = str(value).strip()
+    return int(text) if text.isdigit() else 0
+
 
 def check_ncue_course():
-    session = requests.Session()
-    # 這裡的 Header 必須包含 X-Requested-With 才能騙過 MVC 的 AJAX 檢查
-    ajax_headers = config.HEADERS.copy()
-    ajax_headers.update({
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": config.BASE_URL
-    })
+    session = build_session()
+    state = load_state()
+    changed = False
 
-    try:
-        print(f"🌐 步驟 1: 取得 CSRF 令牌 (__RequestVerificationToken)...")
-        init_resp = session.get(config.BASE_URL, headers=config.HEADERS, timeout=15)
-        soup = BeautifulSoup(init_resp.text, "html.parser")
-        
-        # 抓取 MVC 必備的 Token
-        token_tag = soup.find("input", {"name": "__RequestVerificationToken"})
-        if not token_tag:
-            print("❌ 失敗：找不到驗證令牌，請確認網址是否正確。")
-            return
-        
-        token = token_tag["value"]
-        print(f"✅ 取得 Token: {token[:10]}...")
+    for course_code in config.TARGET_COURSES:
+        print(f"🌐 查詢 {config.TARGET_YEAR}-{config.TARGET_SEMESTER} 課程 {course_code} ...")
 
-        # 步驟 2: 準備 POST Payload (根據你的分析補全欄位)
-        payload = {
-            "__RequestVerificationToken": token,
-            "sel_cls_branch": "",   # 日夜間別
-            "sel_yms_year": config.TARGET_YEAR,
-            "sel_yms_smester": config.TARGET_SEMESTER,
-            "sel_scj_cls_id": "",   # 修課班別
-            "scr_selcode": "",      # 課程代碼 (如果要查全部就留空)
-            "sub_name": "",         # 課程名稱關鍵字
-            "tea_name": "",         # 老師姓名
-            "btnQuery": "查詢"
-        }
+        # 直接用課程代碼查詢，不必每次拉回近兩千筆的全學期表格
+        table = fetch_course_table(
+            session, config.BASE_URL, config.TARGET_YEAR, config.TARGET_SEMESTER,
+            scr_selcode=course_code, html_parser="html.parser",
+            timeout=config.REQUEST_TIMEOUT,
+        )
 
-        print(f"📡 步驟 3: 模擬 AJAX 發送查詢請求...")
-        # 注意：ASP.NET MVC 接收的是 Form Data
-        resp = session.post(config.BASE_URL, data=payload, headers=ajax_headers, timeout=20)
-        
-        if resp.status_code != 200:
-            print(f"❌ 查詢失敗，伺服器回傳狀態碼: {resp.status_code}")
-            return
+        if table is None:
+            print(f"ℹ️ {course_code} 查無資料（代碼可能有誤或該學期尚未開放）")
+            continue
 
-        # 步驟 4: 解析回傳的 HTML 片段
-        final_soup = BeautifulSoup(resp.text, "html.parser")
-        table = final_soup.find("table", {"class": "table"})
-        
-        if not table:
-            print("ℹ️ 查詢成功，但目前無課程資料或條件過於嚴苛。")
-            return
-
-        rows = table.find_all("tr")[1:]
-        print(f"✅ 成功解析表格，共有 {len(rows)} 門課程。")
+        headers, rows = parse_course_table(table)
+        # 依表頭名稱定位欄位，避免硬編索引在站台改版時默默錯位
+        idx_max = find_column_index(headers, "上限人數")
+        idx_reg = find_column_index(headers, "登記人數")
+        if idx_max is None or idx_reg is None:
+            print(f"❌ 表格缺少人數欄位，站台可能又改版了：{headers}")
+            continue
 
         for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 13: continue
-            
-            c_id = cols[1].get_text(strip=True)
-            if c_id in config.TARGET_COURSES:
-                c_name = cols[3].get_text(strip=True)
-                max_n = int(cols[11].get_text(strip=True) or 0)
-                cur_n = int(cols[12].get_text(strip=True) or 0)
-                
-                print(f"📖 [{c_id}] {c_name} - 名額: {cur_n}/{max_n}")
-                if max_n > cur_n:
-                    send_line_message(f"🎯 發現缺額！\n{c_name} ({c_id})\n名額：{cur_n}/{max_n}")
+            if row.get("課程代碼") != course_code:
+                continue
 
-    except Exception as e:
-        print(f"💥 錯誤: {e}")
+            name = row.get("課程名稱", "")
+            serial = row.get("序號", "")
+            max_n = to_int(row.get("上限人數"))
+            reg_n = to_int(row.get("登記人數"))
+            has_vacancy = max_n > reg_n
+
+            key = f"{config.TARGET_YEAR}-{config.TARGET_SEMESTER}-{course_code}-{serial}"
+            was_vacant = state.get(key, {}).get("has_vacancy", False)
+
+            print(f"📖 [{course_code}] {name} - 登記/上限: {reg_n}/{max_n}"
+                  f"{' ✅有缺額' if has_vacancy else ' ❌額滿'}")
+
+            # 只在「額滿 → 有缺額」的轉換時通知，避免每輪排程重複轟炸
+            if has_vacancy and not was_vacant:
+                send_line_message(
+                    f"🎯 發現缺額！\n{name} ({course_code})\n"
+                    f"登記/上限：{reg_n}/{max_n}\n"
+                    f"學期：{config.TARGET_YEAR}-{config.TARGET_SEMESTER}"
+                )
+
+            if state.get(key, {}).get("has_vacancy") != has_vacancy:
+                changed = True
+            state[key] = {"has_vacancy": has_vacancy, "name": name,
+                          "registered": reg_n, "limit": max_n}
+
+    if changed:
+        save_state(state)
+        print(f"💾 狀態已更新：{config.STATE_FILE}")
+
 
 if __name__ == "__main__":
+    if not config.TARGET_COURSES:
+        print("❌ 未設定任何監控課程（TARGET_COURSES）")
+        sys.exit(1)
     check_ncue_course()

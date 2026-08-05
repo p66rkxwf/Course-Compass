@@ -51,3 +51,6 @@ desktop.ini
 *.csv.bak
 *.tmp
 
+# 缺額監控的執行期狀態（由 GitHub Actions cache 保存，不進版控）
+ncue-course-monitor/state.json
+

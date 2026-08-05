@@ -1,0 +1,52 @@
+name: NCUE Course Monitor
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # 每 10 分鐘（GitHub 排程為 best-effort，實際間隔可能更長）
+  workflow_dispatch:          # 允許手動從網頁點擊執行
+
+concurrency:
+  group: course-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r ncue-course-monitor/requirements.txt
+
+      # 跨執行保留缺額狀態，避免有缺額時每輪都重複推播。
+      # cache 內容不可覆寫，故以 run_id 當 key、用 restore-keys 取回最近一次。
+      - name: Restore monitor state
+        uses: actions/cache/restore@v4
+        with:
+          path: ncue-course-monitor/state.json
+          key: monitor-state-${{ github.run_id }}
+          restore-keys: monitor-state-
+
+      - name: Run monitor script
+        working-directory: ncue-course-monitor
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          TARGET_YEAR: '115'
+          TARGET_SEMESTER: '1'
+          TARGET_COURSES: '54019,00342'
+        run: python main.py
+
+      - name: Save monitor state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ncue-course-monitor/state.json
+          key: monitor-state-${{ github.run_id }}

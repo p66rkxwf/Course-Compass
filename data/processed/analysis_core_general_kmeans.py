@@ -2,13 +2,14 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+from pathlib import Path
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
 # ===============================
-# 1. 讀取資料
+# 1. 讀取資料（自動採用最新的 processed 檔，免得檔名寫死後失效）
 # ===============================
-FILE_PATH = "all_courses_20260106_132323.csv"
+FILE_PATH = sorted(Path(__file__).parent.glob("all_courses_*.csv"))[-1]
 df = pd.read_csv(FILE_PATH, low_memory=False)
 
 print("原始資料筆數：", len(df))
@@ -28,6 +29,16 @@ print("核心通識課程筆數：", len(df_core))
 # ===============================
 # 3. 建立行為型特徵
 # ===============================
+# 排除仍在預選登記中的學期：選上人數尚未公布（全為 0），
+# 中籤率與飽和度都會被算成 0，會嚴重扭曲分群結果
+settled = (
+    df.groupby(["學年度", "學期"])["選上人數"].sum()
+    .loc[lambda s: s > 0].index
+)
+df_core = df_core[
+    df_core.set_index(["學年度", "學期"]).index.isin(settled)
+].copy()
+
 # 避免除以 0
 df_core = df_core[
     (df_core["登記人數"] > 0) &
