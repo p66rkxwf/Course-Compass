@@ -875,6 +875,12 @@ span.badge.bg-danger {
     border-left-color: #CB4042;
 }
 
+/* 已加入課表的課：左側綠線，與衝堂的紅線區隔 */
+.course-row.is-selected {
+    border-left-color: #2D6D4B;
+    background: rgba(45, 109, 75, 0.06);
+}
+
 .course-score {
     min-width: 3.2rem;
     font-variant-numeric: tabular-nums;

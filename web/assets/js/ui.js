@@ -1,6 +1,6 @@
 import { WEEKDAYS, WEEKDAY_MAP, PERIOD_TIMES, PERIOD_ORDER } from './config.js';
 import { state } from './state.js';
-import { checkTimeConflict } from './utils.js';
+import { checkTimeConflict, isCourseSelected } from './utils.js';
 import * as api from './api.js';
 
 export function showAlert(message, type = 'info') {
@@ -278,24 +278,36 @@ function courseTime(course) {
 }
 
 /** 詳情／加入按鈕。extra 讓卡片檢視傳 flex-grow-1 把兩顆按鈕撐滿一列 */
-function actionButtons(index, isConflict, extra = '') {
-    return `
-        <button class="btn btn-sm btn-outline-primary ${extra}" onclick='showCourseDetailModal(${index})'>詳情</button>
-        ${isConflict
-            ? `<button class="btn btn-sm btn-secondary ${extra}" disabled>衝堂</button>`
-            : `<button class="btn btn-sm btn-primary ${extra}" onclick='addRecommendedCourseByIndex(${index})'>加入</button>`}`;
+function actionButtons(index, status, extra = '') {
+    const detail = `<button class="btn btn-sm btn-outline-primary ${extra}" onclick='showCourseDetailModal(${index})'>詳情</button>`;
+    if (status === 'selected') {
+        return `${detail}<button class="btn btn-sm btn-success ${extra}" disabled>
+            <i class="fas fa-check me-1"></i>已加入</button>`;
+    }
+    if (status === 'conflict') {
+        return `${detail}<button class="btn btn-sm btn-secondary ${extra}" disabled>衝堂</button>`;
+    }
+    return `${detail}<button class="btn btn-sm btn-primary ${extra}"
+        onclick='addRecommendedCourseByIndex(${index})'>加入</button>`;
 }
 
 function renderResultCards(courses) {
     // 條件列改成橫向後結果區是整個寬度，寬螢幕一排可以放到 4 張卡
     return courses.map((course, index) => {
-        const isConflict = checkTimeConflict(course).hasConflict;
+        const status = courseStatus(course);
         const score = scoreParts(course);
+        const border = status === 'conflict' ? 'border-danger'
+            : (status === 'selected' ? 'border-success' : 'border-0 shadow-sm');
+        const corner = status === 'selected'
+            ? '<div class="position-absolute top-0 start-0 m-2"><span class="badge bg-success"><i class="fas fa-check me-1"></i>已加入</span></div>'
+            : (status === 'conflict'
+                ? '<div class="position-absolute top-0 start-0 m-2"><span class="badge bg-danger">衝堂</span></div>'
+                : '');
 
         return `
             <div class="col-sm-6 col-lg-4 col-xxl-3">
-                <div class="card course-card h-100 ${isConflict ? 'border-danger' : 'border-0 shadow-sm'}">
-                    ${isConflict ? '<div class="position-absolute top-0 start-0 m-2"><span class="badge bg-danger">衝堂</span></div>' : ''}
+                <div class="card course-card h-100 ${border}">
+                    ${corner}
 
                     <div class="card-body d-flex flex-column p-3">
                         <div class="d-flex justify-content-between align-items-start mb-2 gap-1">
@@ -321,7 +333,7 @@ function renderResultCards(courses) {
                             </div>
 
                             <div class="d-flex gap-2">
-                                ${actionButtons(index, isConflict, 'flex-grow-1')}
+                                ${actionButtons(index, status, 'flex-grow-1')}
                             </div>
                         </div>
                     </div>
@@ -332,12 +344,12 @@ function renderResultCards(courses) {
 
 function renderResultList(courses) {
     const rows = courses.map((course, index) => {
-        const isConflict = checkTimeConflict(course).hasConflict;
+        const status = courseStatus(course);
         const score = scoreParts(course);
         const seats = course.score_detail ? course.score_detail.vacancy_seats : null;
 
         return `
-            <div class="course-row list-group-item px-3 py-2 ${isConflict ? 'is-conflict' : ''}">
+            <div class="course-row list-group-item px-3 py-2 is-${status}">
                 <div class="d-flex align-items-center flex-wrap gap-2">
                     <div class="course-score text-center" title="${score.reasons}">
                         ${score.html || '<span class="text-muted small">—</span>'}
@@ -347,7 +359,8 @@ function renderResultList(courses) {
                         <div class="d-flex align-items-center flex-wrap gap-2">
                             <span class="text-secondary small font-monospace">${course.課程代碼}</span>
                             <span class="fw-bold">${course.課程名稱 || course.中文課程名稱}</span>
-                            ${isConflict ? '<span class="badge bg-danger">衝堂</span>' : ''}
+                            ${status === 'selected' ? '<span class="badge bg-success"><i class="fas fa-check me-1"></i>已加入</span>' : ''}
+                            ${status === 'conflict' ? '<span class="badge bg-danger">衝堂</span>' : ''}
                         </div>
                         <div class="small text-muted">
                             ${course.教師姓名 || '未定'} <span class="mx-1">•</span>
@@ -366,7 +379,7 @@ function renderResultList(courses) {
                         <span class="small text-muted" style="font-variant-numeric: tabular-nums;">
                             ${course.選上人數}/${course.上限人數}
                         </span>
-                        <div class="d-flex gap-1">${actionButtons(index, isConflict)}</div>
+                        <div class="d-flex gap-1">${actionButtons(index, status)}</div>
                     </div>
                 </div>
             </div>`;
@@ -388,6 +401,19 @@ export function renderCourseResults(courses, containerId = 'find-results') {
         ? renderResultList(courses)
         : renderResultCards(courses);
 }
+
+/**
+ * 判斷一門課相對於目前課表的狀態。
+ *
+ * 「已加入」必須先於「衝堂」判斷：課程加入後會佔用自己的時段，
+ * 此時 checkTimeConflict 會偵測到那些時段有課而回報衝堂——衝突對象其實是它自己。
+ * 不先擋掉的話，剛加入的課會立刻變成「衝堂」且按鈕被停用。
+ */
+function courseStatus(course) {
+    if (isCourseSelected(course)) return 'selected';
+    return checkTimeConflict(course).hasConflict ? 'conflict' : 'available';
+}
+
 
 /** 詳情視窗裡的推薦分數區塊：把分數拆成各項來源，而不是只給一個數字 */
 function detailScoreHtml(course) {
