@@ -348,39 +348,39 @@ function renderResultList(courses) {
         const score = scoreParts(course);
         const seats = course.score_detail ? course.score_detail.vacancy_seats : null;
 
+        // 用固定欄寬的 grid 而非 flex：徽章文字長度不一（「已額滿」比「尚有 18 名額」窄、
+        // 「無選上率資料」又更寬），flex 會讓每一列的徽章落在不同的水平位置，看起來參差。
+        // grid 讓同一欄的內容永遠對齊，缺值的格子留空即可。
+        const seatBadge = seats == null ? ''
+            : (seats > 0
+                ? `<span class="badge bg-success bg-opacity-75">尚有 ${seats} 名額</span>`
+                : '<span class="badge bg-secondary">已額滿</span>');
+
         return `
-            <div class="course-row list-group-item px-3 py-2 is-${status}">
-                <div class="d-flex align-items-center flex-wrap gap-2">
-                    <div class="course-score text-center" title="${score.reasons}">
+            <div class="course-row list-group-item is-${status}">
+                <div class="course-row-grid">
+                    <div class="cell-score" title="${score.reasons}">
                         ${score.html || '<span class="text-muted small">—</span>'}
                     </div>
 
-                    <div class="flex-grow-1" style="min-width: 14rem;">
+                    <div class="cell-main">
                         <div class="d-flex align-items-center flex-wrap gap-2">
                             <span class="text-secondary small font-monospace">${course.課程代碼}</span>
-                            <span class="fw-bold">${course.課程名稱 || course.中文課程名稱}</span>
+                            <span class="fw-bold text-truncate">${course.課程名稱 || course.中文課程名稱}</span>
                             ${status === 'selected' ? '<span class="badge bg-success"><i class="fas fa-check me-1"></i>已加入</span>' : ''}
                             ${status === 'conflict' ? '<span class="badge bg-danger">衝堂</span>' : ''}
                         </div>
-                        <div class="small text-muted">
+                        <div class="small text-muted text-truncate">
                             ${course.教師姓名 || '未定'} <span class="mx-1">•</span>
                             ${courseTime(course)} <span class="mx-1">•</span> ${course.學分} 學分
                             ${course.上課地點 ? `<span class="mx-1">•</span> ${course.上課地點}` : ''}
                         </div>
                     </div>
 
-                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                        ${acceptanceBadge(course)}
-                        ${seats != null
-                            ? (seats > 0
-                                ? `<span class="badge bg-success bg-opacity-75">尚有 ${seats} 名額</span>`
-                                : '<span class="badge bg-secondary">已額滿</span>')
-                            : ''}
-                        <span class="small text-muted" style="font-variant-numeric: tabular-nums;">
-                            ${course.選上人數}/${course.上限人數}
-                        </span>
-                        <div class="d-flex gap-1">${actionButtons(index, status)}</div>
-                    </div>
+                    <div class="cell-rate">${acceptanceBadge(course)}</div>
+                    <div class="cell-seats">${seatBadge}</div>
+                    <div class="cell-count">${course.選上人數}/${course.上限人數}</div>
+                    <div class="cell-actions">${actionButtons(index, status)}</div>
                 </div>
             </div>`;
     }).join('');

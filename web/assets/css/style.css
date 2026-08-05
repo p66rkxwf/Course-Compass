@@ -861,7 +861,105 @@ span.badge.bg-danger {
     color: #94a3b8;
 }
 
-/* 推薦結果列表檢視：一列一門課，密度高，適合快速比較 */
+/* 查詢結果列表檢視：一列一門課，密度高，適合快速比較。
+   每一列都是同一組固定欄寬的 grid，所以中籤率、名額、人數、按鈕會垂直對齊；
+   用 flex 的話徽章文字長度不同就會讓每列的起點跑掉。 */
+.course-row-grid {
+    display: grid;
+    grid-template-columns:
+        3.5rem              /* 推薦分數 */
+        minmax(0, 1fr)      /* 課程名稱與資訊 */
+        7.5rem              /* 中籤率徽章 */
+        7rem                /* 名額徽章 */
+        4.5rem              /* 選上／上限 */
+        10.5rem;            /* 詳情、加入按鈕 */
+    /* 按鈕欄必須固定寬度：文字長度會變（加入／已加入／衝堂），
+       用 auto 的話這一欄寬度隨內容變動，會把左邊所有欄位一起推移。 */
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+}
+
+.course-row-grid .cell-score {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.course-row-grid .cell-main {
+    min-width: 0;   /* 讓 text-truncate 在 grid 裡生效 */
+}
+
+/* 課名旁的狀態徽章（已加入／衝堂）用緊湊尺寸。
+   全域 .badge 的 padding 是 0.5em 0.8em，會把那一行撐高，
+   造成有徽章的列比其他列高 12px，整份清單的節奏就亂了。 */
+.course-row-grid .cell-main .badge {
+    padding: 0.15em 0.5em;
+    font-size: 0.7rem;
+    line-height: 1.35;
+}
+
+.course-row-grid .cell-rate,
+.course-row-grid .cell-seats {
+    text-align: center;
+}
+
+.course-row-grid .cell-count {
+    text-align: right;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.course-row-grid .cell-actions {
+    display: flex;
+    gap: 0.35rem;
+    justify-content: flex-end;
+    /* 不許換行：「已加入」比「加入」寬（多了圖示與一個字），
+       一旦折成兩行，那一列就會比其他列高 21px。 */
+    flex-wrap: nowrap;
+}
+
+.course-row-grid .cell-actions .btn {
+    white-space: nowrap;
+}
+
+/* 窄螢幕：六欄塞不下，改成 flex 兩行
+   第一行 分數＋課程資訊，第二行 徽章、人數與按鈕。
+   固定欄寬在這個寬度只會把課名擠成「商業簡報…」，資訊反而讀不到。 */
+@media (max-width: 991.98px) {
+    .course-row-grid {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 0.75rem;
+        padding: 0.75rem 1rem;
+    }
+
+    .course-row-grid .cell-score { flex: 0 0 auto; }
+
+    /* 佔滿第一行的剩餘寬度，把其餘欄位擠到第二行 */
+    .course-row-grid .cell-main { flex: 1 1 12rem; }
+
+    .course-row-grid .cell-rate,
+    .course-row-grid .cell-seats,
+    .course-row-grid .cell-count {
+        flex: 0 0 auto;
+        text-align: left;
+    }
+
+    .course-row-grid .cell-actions {
+        flex: 0 0 auto;
+        margin-left: auto;
+    }
+
+    /* 窄螢幕改為換行顯示完整課名與教師時間，不再截斷 */
+    .course-row-grid .cell-main .text-truncate {
+        overflow: visible;
+        white-space: normal;
+        text-overflow: clip;
+    }
+}
+
 .course-row {
     border-left: 3px solid transparent;
     transition: var(--transition-base);
@@ -881,10 +979,6 @@ span.badge.bg-danger {
     background: rgba(45, 109, 75, 0.06);
 }
 
-.course-score {
-    min-width: 3.2rem;
-    font-variant-numeric: tabular-nums;
-}
 
 /* =========================================
    8. 響應式設定 (Responsive)
