@@ -1,6 +1,10 @@
 /**
  * 全局配置與常數
  */
+// 靜態資料包的位置（由 scripts/build_static.py 產生）
+export const DATA_BASE = 'data';
+
+// 目前只剩即時缺額需要連線，走 Pages Function
 export const API_BASE = '/api';
 
 export const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
