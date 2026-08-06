@@ -3,8 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>選課輔助系統 - Course Master</title>
-    
+
+    <!--
+        SEO 說明：這是單頁應用，課程內容由 JavaScript 從 JSON 載入，
+        搜尋引擎能穩定索引的實質上只有這一頁的外殼。因此 title 與 description
+        以「讓搜尋彰師大選課的人找得到」為目標，而不是期待每門課都進搜尋結果。
+
+        站名尚未定案，目前 title 採關鍵字優先寫法，本身即為完整可用的 SEO；
+        日後要加品牌名只需接在最前面（例如「◯◯｜彰化師範大學選課查詢…」）。
+    -->
+    <title>彰化師範大學選課查詢｜歷年中籤率、缺額監控與課表規劃</title>
+    <meta name="description" content="彰化師範大學（NCUE）課程查詢與選課參考工具。提供歷年中籤率估算、通識課程競爭程度、即時缺額監控與課表衝堂檢查，收錄 111 學年度起共 9 個學期、逾一萬八千筆開課紀錄。非官方學生自製專案。">
+    <meta name="author" content="p66rkxwf">
+    <link rel="canonical" href="https://course.sekinv.com/">
+
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+    <!-- 分享到 LINE、Discord、Threads 時的預覽卡片 -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://course.sekinv.com/">
+    <meta property="og:title" content="彰化師範大學選課查詢｜歷年中籤率與缺額監控">
+    <meta property="og:description" content="查歷年中籤率、比較同課不同教師的難易度、監控即時缺額、規劃不衝堂的課表。收錄 9 個學期逾一萬八千筆開課紀錄。">
+    <meta property="og:locale" content="zh_TW">
+    <meta name="twitter:card" content="summary">
+
+    <!-- 結構化資料：讓搜尋結果知道這是一個查詢工具而非一般網頁 -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "彰化師範大學選課查詢",
+      "url": "https://course.sekinv.com/",
+      "applicationCategory": "EducationalApplication",
+      "operatingSystem": "Any",
+      "inLanguage": "zh-Hant-TW",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "TWD" },
+      "description": "彰化師範大學課程查詢與選課參考工具，提供歷年中籤率、通識課程競爭程度分析、即時缺額監控與課表衝堂檢查。非官方專案。"
+    }
+    </script>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -54,8 +92,14 @@
                 </button>
             </nav>
 
-            <div class="p-3 border-top text-center text-muted small">
-                &copy; 2026 Course Master
+            <div class="p-3 border-top text-center text-muted" style="font-size: 0.75rem; line-height: 1.5;">
+                <div>非官方學生自製專案，與彰化師範大學無隸屬關係</div>
+                <div class="mt-1">資料取自學校課程查詢系統，每日自動更新</div>
+                <div class="mt-1">選課請以
+                    <a href="https://webap0.ncue.edu.tw/DEANV2/Other/OB010" target="_blank" rel="noopener"
+                       class="text-decoration-none">學校系統</a>
+                    公告為準
+                </div>
             </div>
         </aside>
 
@@ -800,6 +844,14 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
+
+                    <div class="alert alert-warning small mb-3">
+                        <i class="fas fa-triangle-exclamation me-1"></i>
+                        <strong>本站為非官方的學生自製專案</strong>，與彰化師範大學沒有隸屬關係，
+                        也不是選課管道。所有數字僅供參考，實際選課與名額請以
+                        <a href="https://webap0.ncue.edu.tw/DEANV2/Other/OB010" target="_blank" rel="noopener">學校課程查詢系統</a>
+                        的公告為準。
+                    </div>
 
                     <div class="alert alert-primary bg-primary bg-opacity-10 border-primary border-opacity-25 small mb-4">
                         <i class="fas fa-database me-1"></i>
