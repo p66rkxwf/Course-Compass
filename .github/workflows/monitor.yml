@@ -12,6 +12,11 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    # 網路最壞情況約 8 分鐘（2 門課 × 2 請求 × 3 次嘗試 × 40 秒連線逾時）加上
+    # job 開銷約 1 分鐘。留到 12 分鐘，讓「站台全掛」那一輪能跑完並正常 exit 0，
+    # 而不是被砍成紅燈——那正是這次要消除的雜訊。預設 360 分鐘則會讓卡死的
+    # run 霸佔 concurrency 名額長達 6 小時。
+    timeout-minutes: 12
 
     steps:
       - name: Checkout code

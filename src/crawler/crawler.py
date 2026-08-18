@@ -18,7 +18,10 @@ from .ncue_client import build_session, fetch_course_table, parse_course_table
 
 class CourseCrawler:
     def __init__(self):
-        self.session = build_session(USER_AGENT)
+        # 本類別已有自己的重試迴圈（REQUEST_RETRIES + REQUEST_DELAY），且該迴圈連
+        # RuntimeError 都會重試，是 session 層做不到的。這裡關掉 session 層重試，
+        # 避免 3 次 × 3 次 = 9 趟往返打站台。
+        self.session = build_session(USER_AGENT, retries=0)
         self.logger = logging.getLogger(__name__)
 
     @staticmethod

@@ -13,11 +13,13 @@
 
 import re
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,22 @@ DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+
+# requests 的 timeout 可以是單一秒數，也可以是 (連線, 讀取) 兩段式
+TimeoutSpec = Union[float, Tuple[float, float]]
+
+# 學校站台會間歇性丟棄 TCP 連線（SYN 被丟包，表現為 connect timeout 而非 refused）。
+# 重試放在 session 層，讓三個呼叫端共用同一份行為，不必各寫一份迴圈。
+DEFAULT_RETRIES = 2
+DEFAULT_BACKOFF_FACTOR = 1.0
+
+# 只重試「上游暫時不可用」。500 刻意不列入：依本檔開頭說明，送出格式錯誤的 payload
+# 時站台就是回 500，重試只是浪費時間，還會蓋掉「站台又改版了」這個真正的訊號。
+RETRY_STATUS_FORCELIST = (502, 503, 504)
+
+# 查詢雖然走 POST，語意上卻是唯讀搜尋，重送安全。不列進來的話，POST 的讀取逾時
+# 與 5xx 都不會重試（urllib3 只有「連線錯誤」那條分支不看方法白名單）。
+RETRY_ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST"})
 
 # 站台表頭與本專案既有 raw CSV 欄名的對應。改版後「全英語授課」被改名為
 # 「全英語」，而 data_processor 與前端都以舊名為 key，故在此正規化回來。
@@ -36,14 +54,45 @@ HEADER_ALIASES = {
 DERIVED_COLUMNS = ["英文課程名稱", "教學大綱狀態", "教學大綱連結", "教師個人頁"]
 
 
-def build_session(user_agent: str = DEFAULT_USER_AGENT) -> requests.Session:
-    """建立帶瀏覽器 UA 的 session（token 與 cookie 必須成對，務必重用同一個）"""
+def build_session(
+    user_agent: str = DEFAULT_USER_AGENT,
+    *,
+    retries: int = DEFAULT_RETRIES,
+    backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
+) -> requests.Session:
+    """建立帶瀏覽器 UA 與連線層重試的 session
+
+    token 與 cookie 必須成對，務必重用同一個 session。
+    retries=0 可關掉重試，給已自備重試迴圈的呼叫端用（避免 3×3=9 次打站台）。
+    """
     session = requests.Session()
     session.headers.update({"User-Agent": user_agent})
+
+    if retries > 0:
+        retry = Retry(
+            total=retries,
+            connect=retries,
+            read=retries,
+            status=retries,
+            allowed_methods=RETRY_ALLOWED_METHODS,
+            status_forcelist=RETRY_STATUS_FORCELIST,
+            backoff_factor=backoff_factor,
+            # 重試耗盡時回傳最後一個 response，讓呼叫端的 raise_for_status() 照舊
+            # 丟 HTTPError，而不是變成沒人預期的 RetryError。
+            raise_on_status=False,
+            # Retry-After 可能長達數百秒，排程有時間預算，不能讓它睡穿。
+            respect_retry_after_header=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
     return session
 
 
-def get_request_token(session: requests.Session, base_url: str, timeout: int = 90) -> str:
+def get_request_token(
+    session: requests.Session, base_url: str, timeout: TimeoutSpec = 90
+) -> str:
     """GET 查詢頁並取出 MVC 防偽 token"""
     resp = session.get(base_url, timeout=timeout)
     resp.raise_for_status()
@@ -51,7 +100,12 @@ def get_request_token(session: requests.Session, base_url: str, timeout: int = 9
     soup = BeautifulSoup(resp.text, "html.parser")
     token_tag = soup.find("input", {"name": "__RequestVerificationToken"})
     if not token_tag or not token_tag.get("value"):
-        raise RuntimeError(f"在 {base_url} 找不到 __RequestVerificationToken，站台可能又改版了")
+        # 維護頁與 WAF 攔截頁也是 200 卻沒有 token，附上頁面特徵才分得出是哪一種
+        title = soup.title.get_text(strip=True) if soup.title else ""
+        raise RuntimeError(
+            f"在 {base_url} 找不到 __RequestVerificationToken，站台可能又改版了"
+            f"（HTTP {resp.status_code}, {len(resp.text)} bytes, title={title!r}）"
+        )
 
     return token_tag["value"]
 
@@ -92,7 +146,7 @@ def fetch_course_table(
     cls_branch: str = "",
     scr_selcode: str = "",
     html_parser: str = "lxml",
-    timeout: int = 90,
+    timeout: TimeoutSpec = 90,
 ) -> Optional[BeautifulSoup]:
     """查詢單一學期（或單一課程代碼）並回傳結果表格；查無資料回傳 None"""
     token = get_request_token(session, base_url, timeout=timeout)

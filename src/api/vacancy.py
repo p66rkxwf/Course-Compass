@@ -13,7 +13,7 @@ import time
 from typing import Any, Dict, List, Optional, Sequence
 
 from crawler.ncue_client import (
-    build_session, fetch_course_table, find_column_index, parse_course_table,
+    TimeoutSpec, build_session, fetch_course_table, find_column_index, parse_course_table,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def fetch_vacancy(
     semester: Any,
     codes: Sequence[str],
     *,
-    timeout: int = 30,
+    timeout: TimeoutSpec = 30,
 ) -> List[Dict[str, Any]]:
     """查詢指定課程代碼目前的登記/上限，回傳每個開課序號一筆。"""
     unique_codes = []
@@ -76,7 +76,9 @@ def fetch_vacancy(
             continue
 
         if session is None:
-            session = build_session()
+            # 一次最多 12 門課、每門 2 次請求，重試次數要比監控保守，
+            # 否則站台掛掉時這支 API 會讓瀏覽器卡上好幾分鐘。
+            session = build_session(retries=1)
 
         rows_for_code: List[Dict[str, Any]] = []
         try:
