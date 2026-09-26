@@ -33,6 +33,9 @@
                 <button onclick="switchTab('tab-recommend'); if(window.innerWidth < 768) toggleSidebar();" class="nav-btn btn w-100 text-start mb-2">
                     <i class="fas fa-wand-magic-sparkles me-2"></i> 選課推薦
                 </button>
+                <button onclick="switchTab('tab-assistant'); if(window.innerWidth < 768) toggleSidebar();" class="nav-btn btn w-100 text-start mb-2">
+                    <i class="far fa-comments me-2"></i> 選課助理
+                </button>
                 <button onclick="switchTab('tab-history'); if(window.innerWidth < 768) toggleSidebar();" class="nav-btn btn w-100 text-start mb-2">
                     <i class="fas fa-chart-line me-2"></i> 歷年課程
                 </button>
@@ -72,7 +75,8 @@
                             <div class="col-md-3">
                                 <label class="form-label small text-muted fw-bold">學年度</label>
                                 <select id="select-year" class="form-select">
-                                    <option value="114" selected>114學年度</option>
+                                    <option value="115" selected>115學年度</option>
+                                    <option value="114">114學年度</option>
                                     <option value="113">113學年度</option>
                                     <option value="112">112學年度</option>
                                 </select>
@@ -80,8 +84,8 @@
                             <div class="col-md-3">
                                 <label class="form-label small text-muted fw-bold">學期</label>
                                 <select id="select-semester" class="form-select">
-                                    <option value="1">第1學期</option>
-                                    <option value="2" selected>第2學期</option>
+                                    <option value="1" selected>第1學期</option>
+                                    <option value="2">第2學期</option>
                                 </select>
                             </div>
                             <div class="col-md-6 d-flex align-items-end justify-content-md-end">
@@ -153,6 +157,42 @@
                     </div>
                     <div class="card-body">
                         <div id="selected-courses-list" class="row g-3"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-assistant" class="page-section d-none">
+                <div class="mb-4">
+                    <h2 class="h3 fw-bold mb-1">選課助理</h2>
+                    <p class="text-muted mb-0">用一句話描述需求。助理會查課程資料、中籤預測與教學大綱，只推薦這學期實際開的課。</p>
+                </div>
+
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="d-flex flex-wrap gap-2 mb-3" id="assistant-examples">
+                            <button type="button" class="btn btn-sm btn-outline-secondary assistant-example">週五不要有課、2 學分通識、跟資料分析有關、不要太難搶</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary assistant-example">我想找三門英文課，只要週二或週四，不要早八</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary assistant-example">跟心理健康有關、好選的通識</button>
+                        </div>
+
+                        <div id="assistant-log" class="assistant-log" aria-live="polite">
+                            <div class="assistant-empty text-muted small">
+                                <i class="far fa-lightbulb me-1"></i>會參考「我的課表」避開衝堂。推薦結果可以直接加入課表。
+                            </div>
+                        </div>
+
+                        <form id="assistant-form" class="mt-3" autocomplete="off">
+                            <div class="input-group">
+                                <textarea id="assistant-input" class="form-control" rows="2" placeholder="例如：禮拜四五空下來，找好選的教育學程" aria-label="輸入選課需求"></textarea>
+                                <button class="btn btn-primary px-4" type="submit" id="assistant-send">
+                                    <i class="fas fa-paper-plane me-1"></i>送出
+                                </button>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-2 small text-muted">
+                                <span id="assistant-provider"></span>
+                                <button type="button" class="btn btn-link btn-sm p-0 text-muted" id="assistant-reset">清除對話</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </section>
@@ -559,7 +599,7 @@
     </div>
     
     <div class="modal fade" id="logicInfoModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
             <div class="modal-content border-0 shadow">
                 <div class="modal-header bg-light">
                     <h5 class="modal-title fw-bold text-dark">
@@ -609,6 +649,15 @@
                                         <span>數字越低代表越難選上 (例如 30% 代表 10 人搶 3 個位置)。</span>
                                     </li>
                                 </ul>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h6 class="fw-bold text-dark mb-2">
+                                <i class="fas fa-chart-line me-2 text-danger"></i>「爆滿機率／預估中籤率」怎麼算？
+                            </h6>
+                            <div class="bg-light p-3 rounded-3 border small text-secondary" id="model-info-body">
+                                <span class="text-muted">載入模型驗證資料中…</span>
                             </div>
                         </div>
 

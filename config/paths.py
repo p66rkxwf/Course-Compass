@@ -8,6 +8,9 @@ RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
 PROCESSED_DATA_DIR = PROJECT_ROOT / "data" / "processed"
 DICT_DIR = PROJECT_ROOT / "data" / "dict"
 WEB_DIR = PROJECT_ROOT / "web"
+MODELS_DIR = PROJECT_ROOT / "data" / "models"
+SYLLABUS_DIR = PROJECT_ROOT / "data" / "syllabus"
+DOCS_DIR = PROJECT_ROOT / "docs"
 
 # 字典檔路徑
 TEACHER_DICT_PATH = DICT_DIR / "teacher.csv"

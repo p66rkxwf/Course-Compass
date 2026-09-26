@@ -17,5 +17,5 @@ export const PERIOD_TIMES = {
 };
 
 export const PERIOD_ORDER = [1, 2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 11, 12, 13];
-export const DEFAULT_YEAR = 114;
-export const DEFAULT_SEMESTER = 2;
+export const DEFAULT_YEAR = 115;
+export const DEFAULT_SEMESTER = 1;

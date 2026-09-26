@@ -8,68 +8,16 @@ import logging
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
-from config import PROCESSED_DATA_DIR, WEB_DIR, API_HOST, API_PORT, LOG_LEVEL, LOG_FORMAT, LOG_FILE, LOG_DIR
+from config import PROCESSED_DATA_DIR, WEB_DIR, API_HOST, API_PORT, LOG_LEVEL, LOG_FORMAT, LOG_FILE, LOG_DIR, MODELS_DIR
 from utils.common import safe_read_csv, setup_logging
+from services.recommend import (
+    clean_course_data, clean_single_course, calculate_historical_stats, attach_historical_rates,
+    resolve_semester, select_semester, filter_courses,
+)
+from services.predictions import PredictionStore
 
-def clean_course_data(courses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """清理課程數據，處理 NaN 並規範型別"""
-    import math
-    cleaned = []
-    for course in courses:
-        cleaned_course = {}
-        for key, value in course.items():
-            if isinstance(value, float) and math.isnan(value):
-                cleaned_course[key] = None
-            else:
-                cleaned_course[key] = value
-        for fld in ['起始節次', '結束節次']:
-            if fld in cleaned_course and cleaned_course[fld] is not None:
-                try:
-                    num = float(cleaned_course[fld])
-                    if num.is_integer():
-                        cleaned_course[fld] = int(num)
-                except Exception:
-                    pass
-        cleaned.append(cleaned_course)
-    return cleaned
+prediction_store = PredictionStore(MODELS_DIR)
 
-def clean_single_course(course: Dict[str, Any]) -> Dict[str, Any]:
-    import math
-    cleaned_course = {}
-    for key, value in course.items():
-        if isinstance(value, float) and math.isnan(value):
-            cleaned_course[key] = None
-        else:
-            cleaned_course[key] = value
-    return cleaned_course
-
-def calculate_historical_stats(full_df: pd.DataFrame) -> Dict[tuple, float]:
-    """計算每門課（同名稱+同教師）的歷年平均選上率"""
-    if full_df is None or full_df.empty:
-        return {}
-    
-    if '登記人數' not in full_df.columns or '上限人數' not in full_df.columns:
-        return {}
-
-    df = full_df.copy()
-    df['登記人數'] = pd.to_numeric(df['登記人數'], errors='coerce').fillna(0)
-    df['上限人數'] = pd.to_numeric(df['上限人數'], errors='coerce').fillna(0)
-    
-    df['課程名稱'] = df['課程名稱'].fillna('').astype(str).str.strip()
-    df['教師姓名'] = df['教師姓名'].fillna('').astype(str).str.strip()
-
-    valid_mask = (df['登記人數'] > 0) & (df['上限人數'] > 0)
-    valid_df = df[valid_mask].copy()
-
-    if valid_df.empty:
-        return {}
-
-    valid_df['acceptance_rate'] = valid_df['上限人數'] / valid_df['登記人數']
-    valid_df['acceptance_rate'] = valid_df['acceptance_rate'].clip(upper=1.0)
-    
-    avg_rates = valid_df.groupby(['課程名稱', '教師姓名'])['acceptance_rate'].mean().to_dict()
-    
-    return avg_rates
 
 app = FastAPI(title="Course Master API", version="1.0.0")
 
@@ -107,6 +55,21 @@ def get_latest_courses_df() -> Optional[pd.DataFrame]:
         _courses_cache[cache_key] = df
         
     return df
+
+def get_raw_courses_df() -> Optional[pd.DataFrame]:
+    """未去重的 processed 資料（一個上課時段一列）；中籤預測現算特徵時需要完整時段資訊"""
+    if "raw" in _courses_cache:
+        return _courses_cache["raw"]
+    processed_files = sorted(PROCESSED_DATA_DIR.glob("all_courses_*.csv"))
+    if not processed_files:
+        return None
+    df = safe_read_csv(processed_files[-1])
+    if df is not None:
+        _courses_cache["raw"] = df
+    return df
+
+def attach_predictions(courses: List[Dict[str, Any]]) -> None:
+    prediction_store.attach(courses, get_raw_courses_df())
 
 def get_all_historical_courses_df() -> Optional[pd.DataFrame]:
     """取得所有歷史課程資料"""
@@ -192,10 +155,8 @@ async def search_courses(q: str, limit: int = 50):
         courses = results.to_dict('records')
         courses = clean_course_data(courses)
 
-        for c in courses:
-            name = str(c.get('課程名稱') or '').strip()
-            teacher = str(c.get('教師姓名') or '').strip()
-            c['historical_acceptance_rate'] = stats_map.get((name, teacher), None)
+        attach_historical_rates(courses, stats_map)
+        attach_predictions(courses)
 
         return CourseResponse(courses=courses, total=len(courses))
     except Exception as e:
@@ -231,114 +192,35 @@ async def recommend_courses(request: RecommendRequest):
         if full_df is None or full_df.empty:
             raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
         
-        if request.year is not None and request.semester is not None:
-            current_year, current_semester = request.year, request.semester
-        else:
-            current_year = int(full_df['學年度'].max()) if '學年度' in full_df.columns else None
-            if current_year:
-                try:
-                    current_semester = int(full_df[full_df['學年度'] == current_year]['學期'].max())
-                except: current_semester = 1
-            else: current_semester = 1
-
-        target_df = pd.DataFrame()
-        if current_year and current_semester:
-            target_df = full_df[
-                (full_df['學年度'].astype(str) == str(current_year)) & 
-                (full_df['學期'].astype(str) == str(current_semester))
-            ].copy()
-        
+        current_year, current_semester = resolve_semester(full_df, request.year, request.semester)
+        target_df = select_semester(full_df, current_year, current_semester)
         if target_df.empty:
             return CourseResponse(courses=[], total=0)
         
-        filtered = target_df.copy()
-        if request.category:
-             if request.category in ["核心通識", "精進中文", "精進英外文", "教育學程", "大二體育", "大三、四體育"]:
-                filtered = filtered[filtered['開課班別(代表)'].astype(str).str.contains(request.category, na=False)]
-        
-        if request.college:
-            c = str(request.college)
-            if '學院' in filtered.columns:
-                filtered = filtered[filtered['學院'] == c]
-
-        if request.department:
-            d = str(request.department)
-            if '科系' in filtered.columns:
-                 filtered = filtered[(filtered['科系'] == d) | (filtered['開課班別(代表)'].str.contains(d, na=False))]
-            else:
-                 filtered = filtered[filtered['開課班別(代表)'].str.contains(d, na=False)]
-
-        if request.grade and '年級' in filtered.columns:
-             filtered = filtered[filtered['年級'].astype(str) == str(request.grade)]
-
-        if request.level:
-            level_col = '部別(大學/碩士/博士)' if '部別(大學/碩士/博士)' in filtered.columns else None
-            if not level_col and '部別' in filtered.columns:
-                level_col = '部別'
-
-            if level_col:
-                filtered = filtered[filtered[level_col].astype(str) == request.level]
-            else:
-                mask_phd = filtered['開課班別(代表)'].astype(str).str.contains('博', na=False) | filtered['年級'].astype(str).str.contains('博', na=False)
-                mask_master = filtered['開課班別(代表)'].astype(str).str.contains('碩', na=False) | filtered['年級'].astype(str).str.contains('碩', na=False)
-
-                if request.level == '博士班':
-                    filtered = filtered[mask_phd]
-                elif request.level == '碩士班':
-                    filtered = filtered[mask_master & ~mask_phd]
-                elif request.level == '大學部':
-                    filtered = filtered[~mask_master & ~mask_phd]
-
-        if request.preferred_days:
-            day_map = {'1':'一', '2':'二', '3':'三', '4':'四', '5':'五', '6':'六', '7':'日'}
-            days_set = set(request.preferred_days)
-            
-            def check_day(row_day):
-                d_str = str(row_day)
-                if d_str in days_set: return True
-                if d_str in day_map and str(day_map[d_str]) in days_set: return True
-                for k, v in day_map.items():
-                    if str(v) == d_str and k in days_set: return True
-                return False
-
-            if '星期' in filtered.columns:
-                filtered = filtered[filtered['星期'].apply(check_day)]
-
-        if request.current_courses:
-            for c in request.current_courses:
-                code, serial = str(c.get('code','')), str(c.get('serial',''))
-                filtered = filtered[~((filtered['課程代碼'].astype(str)==code) & (filtered['序號'].astype(str)==serial))]
-
-        if request.empty_slots:
-            empty_set = set((int(s['day']), int(s['period'])) for s in request.empty_slots if s and 'day' in s and 'period' in s)
-            def fits(row):
-                try:
-                    day = row.get('星期')
-                    if pd.isna(day): return False
-                    if str(day).isdigit(): d_num = int(day)
-                    else: d_num = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':7}.get(str(day))
-                    if not d_num: return False
-                    s, e = int(row.get('起始節次') or 0), int(row.get('結束節次') or 0)
-                    if s <= 0 or e <= 0: return False
-                    for p in range(s, e+1):
-                        if (d_num, p) not in empty_set: return False
-                    return True
-                except: return False
-            filtered = filtered[filtered.apply(fits, axis=1)]
+        filtered = filter_courses(
+            target_df,
+            category=request.category,
+            college=request.college,
+            department=request.department,
+            grade=request.grade,
+            level=request.level,
+            preferred_days=request.preferred_days,
+            current_courses=request.current_courses,
+            empty_slots=request.empty_slots,
+        )
 
         history_df = get_all_historical_courses_df()
         stats_map = calculate_historical_stats(history_df)
 
         results_list = filtered.head(50).to_dict('records')
         results_list = clean_course_data(results_list)
-        
-        for c in results_list:
-            name = str(c.get('課程名稱') or '').strip()
-            teacher = str(c.get('教師姓名') or '').strip()
-            c['historical_acceptance_rate'] = stats_map.get((name, teacher), None)
+        attach_historical_rates(results_list, stats_map)
+        attach_predictions(results_list)
 
         return CourseResponse(courses=results_list, total=len(results_list))
         
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"推薦 API 錯誤: {str(e)}")
         raise HTTPException(status_code=500, detail=f"系統錯誤: {str(e)}")
@@ -358,6 +240,7 @@ async def get_course_history(q: str, limit: int = 100):
         results = df[mask].sort_values(['學年度', '學期'], ascending=[False, False]).head(limit)
         courses = results.to_dict('records')
         courses = clean_course_data(courses)
+        attach_predictions(courses)
         return CourseResponse(courses=courses, total=len(courses))
     except Exception as e:
         raise HTTPException(status_code=500, detail="獲取歷年資料失敗")
@@ -379,6 +262,137 @@ async def get_course_stats():
         }
         return stats
     except: raise HTTPException(500)
+
+@app.get("/api/predict/model-info")
+async def get_prediction_model_info():
+    """中籤預測模型的版本、訓練資料與驗證結果（開發折＋held-out），供介面說明用"""
+    meta = prediction_store.meta()
+    if not meta:
+        raise HTTPException(status_code=404, detail="尚未訓練中籤預測模型")
+    keys = ["model_version", "trained_at", "data_file", "frozen_train_semesters", "holdout_semester",
+            "dev_test_semesters", "dev_summary", "holdout"]
+    return {k: meta.get(k) for k in keys}
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    current_courses: List[Dict[str, Any]] = []
+    year: Optional[int] = None
+    semester: Optional[int] = None
+    provider: Optional[str] = None  # "mock" 可強制使用離線規則模式
+
+_syllabus_indexes: Dict[tuple, Any] = {}
+
+def get_syllabus_index(year: int, semester: int):
+    """教學大綱向量索引（python main.py build-index 產生）；沒有就回傳 None，助理會略過大綱搜尋"""
+    key = (year, semester)
+    if key not in _syllabus_indexes:
+        try:
+            from ai.index import SyllabusIndex
+            _syllabus_indexes[key] = SyllabusIndex.load(year, semester)
+        except Exception as e:
+            logging.info(f"{year}-{semester} 沒有可用的大綱索引：{e}")
+            _syllabus_indexes[key] = None
+    return _syllabus_indexes[key]
+
+@app.on_event("startup")
+def warm_up_syllabus_index():
+    """啟動時在背景載入最新學期的大綱索引（約數秒），避免第一個使用者的查詢卡住"""
+    import threading
+
+    def _load():
+        df = get_latest_courses_df()
+        if df is not None and not df.empty:
+            year, semester = resolve_semester(df, None, None)
+            get_syllabus_index(int(year), int(semester))
+    threading.Thread(target=_load, daemon=True).start()
+
+@app.post("/api/ai/chat")
+def ai_chat(request: ChatRequest):
+    """選課助理：自然語言需求 → LLM 呼叫工具查課 → 回傳經過驗證、確實存在的課程"""
+    from ai.agent import run_agent
+    from ai.llm import get_client
+    from ai.tools import CourseContext, course_key
+
+    full_df = get_latest_courses_df()
+    if full_df is None or full_df.empty:
+        raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
+    if not request.messages or request.messages[-1].role != "user":
+        raise HTTPException(status_code=400, detail="最後一則訊息必須是使用者的問題")
+
+    year, semester = resolve_semester(full_df, request.year, request.semester)
+    sem_df = select_semester(full_df, year, semester)
+    by_key = {course_key(r): r for r in sem_df.to_dict('records')}
+    # 前端傳來的現有課表：以資料庫中的版本為準；別學期的課（例如 localStorage 舊資料）照原樣使用
+    current = [by_key.get(course_key(c), c) for c in request.current_courses]
+
+    raw_df = get_raw_courses_df()
+    ctx = CourseContext(
+        semester_df=sem_df, history_df=full_df, year=int(year), semester=int(semester),
+        current_courses=current,
+        predict=lambda c: prediction_store.get(c, raw_df),
+        syllabus_index=get_syllabus_index(int(year), int(semester)),
+    )
+    try:
+        result = run_agent([m.model_dump() for m in request.messages], ctx, get_client(request.provider))
+    except Exception as e:
+        logging.error(f"選課助理錯誤: {e}")
+        raise HTTPException(status_code=500, detail=f"選課助理發生錯誤: {e}")
+
+    courses = clean_course_data(result["courses"])
+    attach_historical_rates(courses, calculate_historical_stats(full_df))
+    attach_predictions(courses)
+    result["courses"] = courses
+    result["semester"] = f"{year}-{semester}"
+    return result
+
+@app.get("/api/ai/syllabus-search")
+def syllabus_search(q: str, k: int = 8, year: Optional[int] = None, semester: Optional[int] = None):
+    """用自然語言搜尋教學大綱內容，回傳相關課程與命中的段落"""
+    full_df = get_latest_courses_df()
+    if full_df is None or full_df.empty:
+        raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
+    year, semester = resolve_semester(full_df, year, semester)
+    index = get_syllabus_index(int(year), int(semester))
+    if index is None:
+        return {"available": False, "hits": [], "detail": "尚未建立這學期的大綱索引（python main.py fetch-syllabi && python main.py build-index）"}
+    sem_df = select_semester(full_df, year, semester)
+    from ai.tools import course_key
+    by_key = {course_key(r): r for r in sem_df.to_dict('records')}
+    hits = []
+    for h in index.search(q, k=max(1, min(k, 30))):
+        c = by_key.get(course_key({"code": h["code"], "serial": h["serial"]}))
+        if c is None:
+            continue
+        hits.append({**c, "match_section": h["section"], "match_text": h["text"], "match_score": round(float(h["score"]), 4)})
+    hits = clean_course_data(hits)
+    attach_predictions(hits)
+    return {"available": True, "hits": hits, "index": index.info}
+
+class SyllabusQARequest(BaseModel):
+    code: str
+    serial: str
+    question: str
+    year: Optional[int] = None
+    semester: Optional[int] = None
+
+@app.post("/api/ai/syllabus-qa")
+def syllabus_qa(request: SyllabusQARequest):
+    """針對單一課程的大綱問答，回答附上引用的原文段落"""
+    from ai.index import answer_from_syllabus
+    from ai.llm import get_client
+
+    full_df = get_latest_courses_df()
+    if full_df is None or full_df.empty:
+        raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
+    year, semester = resolve_semester(full_df, request.year, request.semester)
+    index = get_syllabus_index(int(year), int(semester))
+    if index is None:
+        raise HTTPException(status_code=404, detail="尚未建立這學期的大綱索引")
+    return answer_from_syllabus(index, request.code, request.serial, request.question, get_client())
 
 @app.get("/api/courses/{course_id}")
 async def get_course_detail(course_id: str):

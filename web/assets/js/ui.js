@@ -1,6 +1,8 @@
 import { WEEKDAYS, WEEKDAY_MAP, PERIOD_TIMES, PERIOD_ORDER } from './config.js';
 import { state } from './state.js';
 import { checkTimeConflict } from './utils.js';
+import { admissionBadge, admissionDetail } from './prediction.js';
+import { bindSyllabusQA } from './assistant.js';
 
 export function showAlert(message, type = 'info') {
     const iconMap = { info: 'info', success: 'success', warning: 'warning', danger: 'error', error: 'error' };
@@ -262,9 +264,10 @@ export function renderRecommendResults(courses) {
                             <span class="text-secondary fw-normal me-1" style="font-size: 0.9em;">${course.課程代碼}</span>
                             ${course.課程名稱 || course.中文課程名稱}
                         </h5>
-                        <div class="small text-muted mb-3">
+                        <div class="small text-muted mb-2">
                             ${course.教師姓名} <span class="mx-1">•</span> ${course.科系 || ''}
                         </div>
+                        <div class="mb-3">${admissionBadge(course.admission_pred)}</div>
                         
                         <div class="mt-auto">
                             <div class="d-flex align-items-center mb-3 text-secondary small">
@@ -393,8 +396,20 @@ export function showCourseDetailModal(course) {
                     </div>
                 </div>
                 <div class="col-12">
+                    <div class="text-muted small mb-1">中籤預測</div>
+                    <div class="border-bottom pb-2">${admissionDetail(course.admission_pred, course)}</div>
+                </div>
+                <div class="col-12">
                     <div class="text-muted small mb-1">課程大綱</div>
                     <div>${syllabusLinkHtml}</div>
+                    ${(syllabusUrl && syllabusUrl.includes('http')) ? `
+                    <div class="syllabus-qa mt-2">
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" placeholder="問這門課的大綱，例如：期中考占多少？" aria-label="問這門課的大綱">
+                            <button class="btn btn-outline-primary" type="button"><i class="fas fa-magnifying-glass me-1"></i>問大綱</button>
+                        </div>
+                        <div class="syllabus-qa-answer small mt-2"></div>
+                    </div>` : ''}
                 </div>
 
                 ${course.備註 ? `
@@ -408,6 +423,8 @@ export function showCourseDetailModal(course) {
         </div>
     `;
     
+    bindSyllabusQA(body, course);
+
     const addBtn = document.getElementById('btn-add-to-schedule');
     if (addBtn) {
         const newBtn = addBtn.cloneNode(true);

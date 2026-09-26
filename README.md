@@ -100,6 +100,19 @@ python main.py api
 - 歷年資料查詢
 - 缺額追蹤功能
 
+### AI 功能（詳見 [docs/AI_FEATURES.md](docs/AI_FEATURES.md)）
+- **中籤預測**：每門課的爆滿機率與預估中籤率（80% 區間），walk-forward 驗證＋115-1 held-out
+- **選課助理**：一句話描述需求，本機 LLM（Ollama qwen2.5:7b）呼叫工具查課，建議的課逐一比對資料庫防幻覺
+- **教學大綱搜尋與問答**：依內容找課、針對單一課程問大綱並附原文引用
+
+```bash
+python main.py train-demand     # 訓練中籤預測並產生 docs/demand_model_report.md
+python main.py fetch-syllabi    # 下載當學期教學大綱
+python main.py build-index      # 建立大綱索引（需 ollama pull bge-m3；無 Ollama 時用離線 mock）
+python main.py eval-agent       # 選課助理評估 → docs/agent_eval.md
+python -m pytest                # 測試
+```
+
 ## 資料流程
 
 ```

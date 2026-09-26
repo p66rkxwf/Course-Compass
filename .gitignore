@@ -51,3 +51,6 @@ desktop.ini
 *.csv.bak
 *.tmp
 
+# 教學大綱 PDF 與向量索引（檔案大，可用 fetch-syllabi / build-index 重建）
+data/syllabus/
+.pytest_cache/

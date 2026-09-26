@@ -3,6 +3,8 @@ import { state, saveToLocalStorage, loadFromLocalStorage } from './state.js';
 import * as api from './api.js';
 import * as utils from './utils.js';
 import * as ui from './ui.js';
+import { renderModelInfo } from './prediction.js';
+import { initAssistant } from './assistant.js';
 
 let historyGroupsCache = [];
 let historyChartInstance = null;
@@ -44,6 +46,7 @@ async function initializeApp() {
     ui.updateScheduleDisplay();
     ui.updateSelectedCoursesList();
     exposeGlobalFunctions();
+    initAssistant();
 
     if (window.toggleScheduleView) {
         const pref = localStorage.getItem('scheduleViewPref');
@@ -1296,6 +1299,7 @@ function setupEventListeners() {
     document.getElementById('btn-clear').addEventListener('click', handleClearSchedule);
     document.getElementById('btn-search-recommend').addEventListener('click', handleSearchRecommend);
     document.getElementById('btn-search-history').addEventListener('click', handleSearchHistory);
+    document.getElementById('logicInfoModal')?.addEventListener('show.bs.modal', () => renderModelInfo());
     document.getElementById('search-history-input').addEventListener('keypress', e => {
         if (e.key === 'Enter') handleSearchHistory();
     });
