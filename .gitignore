@@ -60,3 +60,8 @@ web/data/
 
 # wrangler 的本地開發快取與狀態
 .wrangler/
+
+# 教學大綱 PDF 與向量索引（約 350 MB，可用 fetch-syllabi / build-index 重建）
+data/syllabus/
+# 中籤模型的本機快取：pickle 無法跨 numpy 大版本，需要時會依 meta 自動重訓
+data/models/demand_model.joblib

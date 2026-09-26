@@ -6,6 +6,8 @@ import * as ui from './ui.js';
 import * as find from './find.js';
 import * as dashboard from './dashboard.js';
 import * as vacancy from './vacancy.js';
+import { initAssistant } from './assistant.js';
+import { renderModelInfo } from './prediction.js';
 
 let historyGroupsCache = [];
 let historyChartInstance = null;
@@ -90,6 +92,8 @@ async function initializeApp() {
     ui.updateScheduleDisplay();
     ui.updateSelectedCoursesList();
     exposeGlobalFunctions();
+    initAssistant();   // 不 await：靜態網站上要等 /api/ai/status 逾時，不能卡住其他初始化
+    document.getElementById('logicInfoModal')?.addEventListener('show.bs.modal', () => renderModelInfo());
 
     if (window.toggleScheduleView) {
         const pref = localStorage.getItem('scheduleViewPref');

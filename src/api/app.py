@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from config import (
     PROCESSED_DATA_DIR, WEB_DIR, API_HOST, API_PORT, LOG_LEVEL, LOG_FORMAT, LOG_FILE, LOG_DIR,
-    BASE_URL, REQUEST_TIMEOUT,
+    BASE_URL, REQUEST_TIMEOUT, MODELS_DIR,
 )
 from utils.common import safe_read_csv, setup_logging
 from api import dashboard as dashboard_builder
@@ -19,6 +19,7 @@ from api import filters as course_filters
 from api import search as course_search
 from api import vacancy as vacancy_client
 from api.recommender import rank_courses
+from api.predictions import PredictionStore
 
 def clean_course_data(courses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """清理課程數據，處理 NaN 並規範型別"""
@@ -141,6 +142,12 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.mount("/css", StaticFiles(directory=str(WEB_DIR / "assets" / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(WEB_DIR / "assets" / "js")), name="js")
 app.mount("/assets", StaticFiles(directory=str(WEB_DIR / "assets")), name="assets")
+# 本機用 python main.py api 開網站時，前端讀的是 scripts/build_static.py 產生的 web/data。
+# 目錄可能還沒建置，check_dir=False 讓 API 照常啟動（測試也不需要先建置）。
+app.mount("/data", StaticFiles(directory=str(WEB_DIR / "data"), check_dir=False), name="data")
+
+# 中籤預測（data/models/demand_predictions.csv）；AI 相關端點見檔尾
+prediction_store = PredictionStore(MODELS_DIR)
 
 # 以資料檔的 (路徑, mtime) 作為快取版本；資料更新後不必重啟 API 就會自動重讀。
 _cache_version: Optional[Tuple[str, float]] = None
@@ -185,6 +192,19 @@ def get_latest_courses_df() -> Optional[pd.DataFrame]:
         _courses_cache[cache_key] = df
 
     return df
+
+def get_raw_courses_df() -> Optional[pd.DataFrame]:
+    """未去重的處理後資料（一個上課時段一列）。中籤預測現算特徵時需要完整的時段資訊。"""
+    latest_file = _latest_processed_file()
+    if latest_file is None:
+        return None
+    _ensure_cache_fresh(latest_file)
+    if "raw" not in _courses_cache:
+        df = safe_read_csv(latest_file)
+        if df is None:
+            return None
+        _courses_cache["raw"] = df
+    return _courses_cache["raw"]
 
 def get_historical_stats() -> Dict[tuple, float]:
     """歷年平均中籤率（隨資料檔快取）。
@@ -280,6 +300,10 @@ RecommendRequest = CourseQueryRequest
 @app.get("/")
 async def read_root():
     return FileResponse(WEB_DIR / "index.html")
+
+@app.get("/favicon.svg")
+async def read_favicon():
+    return FileResponse(WEB_DIR / "favicon.svg", media_type="image/svg+xml")
 
 @app.get("/api/courses/all")
 async def get_all_courses(year: Optional[int] = None, semester: Optional[int] = None):
@@ -713,6 +737,174 @@ async def get_departments(year: Optional[int] = None, semester: Optional[int] = 
         departments.sort()
         return {"departments": departments}
     except: raise HTTPException(500)
+
+# ============================================================================
+# AI 功能（本機版）：中籤預測說明、選課助理、教學大綱搜尋與問答
+#
+# 正式網站是 Cloudflare Pages 全靜態部署，沒有這些端點——中籤預測在建置期寫進
+# 靜態資料包，選課助理與大綱問答需要本機的 Ollama，只在 python main.py api 時可用。
+# 前端先打 /api/ai/status，拿不到就把這兩個功能標成「本機版限定」。
+# ============================================================================
+
+_syllabus_indexes: Dict[Tuple[int, int], Any] = {}
+
+
+def get_syllabus_index(year: int, semester: int):
+    """教學大綱向量索引（python main.py build-index 產生）；沒有就回傳 None"""
+    key = (int(year), int(semester))
+    if key not in _syllabus_indexes:
+        try:
+            from ai.index import SyllabusIndex
+            _syllabus_indexes[key] = SyllabusIndex.load(*key)
+        except Exception as e:
+            logging.info(f"{key[0]}-{key[1]} 沒有可用的大綱索引：{e}")
+            _syllabus_indexes[key] = None
+    return _syllabus_indexes[key]
+
+
+@app.on_event("startup")
+def warm_up_syllabus_index():
+    """啟動時在背景載入最新學期的大綱索引（需數秒），避免第一個查詢卡住"""
+    import threading
+
+    def _load():
+        df = get_latest_courses_df()
+        year, semester = _resolve_semester(df, None, None)
+        if year is not None:
+            get_syllabus_index(year, semester)
+    threading.Thread(target=_load, daemon=True).start()
+
+
+@app.get("/api/ai/status")
+def ai_status():
+    """前端用來判斷 AI 功能是否可用（靜態網站上這支不存在）"""
+    from ai.llm import get_client
+
+    df = get_latest_courses_df()
+    year, semester = _resolve_semester(df, None, None)
+    client = get_client()
+    index = get_syllabus_index(year, semester) if year is not None else None
+    return {
+        "available": True,
+        "provider": getattr(client, "name", "unknown"),
+        "llm_ready": not getattr(client, "name", "").startswith("mock"),
+        "syllabus_index": index.info if index is not None else None,
+        "semester": f"{year}-{semester}" if year is not None else None,
+    }
+
+
+@app.get("/api/predict/model-info")
+async def get_prediction_model_info():
+    """中籤預測模型的版本、訓練資料與驗證結果（開發折＋held-out）"""
+    meta = prediction_store.meta()
+    if not meta:
+        raise HTTPException(status_code=404, detail="尚未訓練中籤預測模型")
+    keys = ["model_version", "trained_at", "data_file", "frozen_train_semesters", "holdout_semester",
+            "dev_test_semesters", "dev_summary", "holdout"]
+    return {k: meta.get(k) for k in keys}
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    current_courses: List[Dict[str, Any]] = []
+    year: Optional[int] = None
+    semester: Optional[int] = None
+    provider: Optional[str] = None  # "mock" 可強制使用離線規則模式
+
+
+@app.post("/api/ai/chat")
+def ai_chat(request: ChatRequest):
+    """選課助理：自然語言需求 → LLM 呼叫工具查課 → 只回傳目標學期確實存在的課"""
+    from ai.agent import run_agent
+    from ai.llm import get_client
+    from ai.tools import CourseContext, course_key
+
+    full_df = get_latest_courses_df()
+    if full_df is None or full_df.empty:
+        raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
+    if not request.messages or request.messages[-1].role != "user":
+        raise HTTPException(status_code=400, detail="最後一則訊息必須是使用者的問題")
+
+    year, semester = _resolve_semester(full_df, request.year, request.semester)
+    sem_df = course_filters.filter_by_semester(full_df, year, semester)
+    by_key = {course_key(r): r for r in sem_df.to_dict('records')}
+    # 前端傳來的現有課表以資料集中的版本為準；別學期的課（例如 localStorage 舊資料）照原樣使用
+    current = [by_key.get(course_key(c), c) for c in request.current_courses]
+
+    raw_df = get_raw_courses_df()
+    ctx = CourseContext(
+        semester_df=sem_df, history_df=full_df, year=int(year), semester=int(semester),
+        current_courses=current,
+        predict=lambda c: prediction_store.get(c, raw_df),
+        syllabus_index=get_syllabus_index(year, semester),
+    )
+    try:
+        result = run_agent([m.model_dump() for m in request.messages], ctx, get_client(request.provider))
+    except Exception as e:
+        logging.error(f"選課助理錯誤: {e}")
+        raise HTTPException(status_code=500, detail=f"選課助理發生錯誤: {e}")
+
+    courses = clean_course_data(result["courses"])
+    prediction_store.attach(courses, raw_df)
+    result["courses"] = courses
+    result["semester"] = f"{year}-{semester}"
+    return result
+
+
+@app.get("/api/ai/syllabus-search")
+def syllabus_search(q: str, k: int = 8, year: Optional[int] = None, semester: Optional[int] = None):
+    """用自然語言搜尋教學大綱內容，回傳相關課程與命中的段落"""
+    from ai.tools import course_key
+
+    full_df = get_latest_courses_df()
+    if full_df is None or full_df.empty:
+        raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
+    year, semester = _resolve_semester(full_df, year, semester)
+    index = get_syllabus_index(year, semester)
+    if index is None:
+        return {"available": False, "hits": [],
+                "detail": "尚未建立這學期的大綱索引（python main.py fetch-syllabi && python main.py build-index）"}
+    sem_df = course_filters.filter_by_semester(full_df, year, semester)
+    by_key = {course_key(r): r for r in sem_df.to_dict('records')}
+    hits = []
+    for h in index.search(q, k=max(1, min(k, 30))):
+        c = by_key.get(course_key({"code": h["code"], "serial": h["serial"]}))
+        if c is not None:
+            hits.append({**c, "match_section": h["section"], "match_text": h["text"],
+                         "match_score": round(float(h["score"]), 4)})
+    hits = clean_course_data(hits)
+    prediction_store.attach(hits, get_raw_courses_df())
+    return {"available": True, "hits": hits, "index": index.info}
+
+
+class SyllabusQARequest(BaseModel):
+    code: str
+    serial: str
+    question: str
+    year: Optional[int] = None
+    semester: Optional[int] = None
+
+
+@app.post("/api/ai/syllabus-qa")
+def syllabus_qa(request: SyllabusQARequest):
+    """針對單一課程的大綱問答，回答附上引用的原文段落"""
+    from ai.index import answer_from_syllabus
+    from ai.llm import get_client
+
+    full_df = get_latest_courses_df()
+    if full_df is None or full_df.empty:
+        raise HTTPException(status_code=404, detail="沒有處理過的課程數據")
+    year, semester = _resolve_semester(full_df, request.year, request.semester)
+    index = get_syllabus_index(year, semester)
+    if index is None:
+        raise HTTPException(status_code=404, detail="尚未建立這學期的大綱索引")
+    return answer_from_syllabus(index, request.code, request.serial, request.question, get_client())
+
 
 def main():
     setup_logging()

@@ -91,6 +91,12 @@ export async function queryCourses(payload) {
     });
 }
 
+/** 中籤預測模型的版本與驗證成績（建置期寫進 meta.json；沒有訓練過就是 null） */
+export async function fetchPredictionModel() {
+    const meta = await loadMeta();
+    return meta.prediction_model || null;
+}
+
 /** 歷年課程查詢。整份歷年資料 gzip 後約 0.5 MB，只在使用者真的開這頁時才載入 */
 export async function fetchHistory(query) {
     const data = await loadJson('history.json');

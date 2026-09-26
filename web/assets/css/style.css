@@ -4,6 +4,13 @@
 
 /* --- 基礎變數 (亮色模式) --- */
 :root {
+    /* 中籤預測風險色（亮色） */
+    --risk-high: #b42318;
+    --risk-high-soft: rgba(180, 35, 24, 0.10);
+    --risk-mid: #9a5b00;
+    --risk-mid-soft: rgba(154, 91, 0, 0.12);
+    --risk-low: #1d7a4f;
+    --risk-low-soft: rgba(29, 122, 79, 0.10);
     --primary-color: #577C8A;
     --primary-hover: #77969A;
     --primary-light: #eef2ff;
@@ -28,6 +35,12 @@
 
 /* --- 深色模式 - 科技感配色 (低飽和舒適版) --- */
 [data-theme="dark"] {
+    --risk-high: #f59b8f;
+    --risk-high-soft: rgba(245, 155, 143, 0.14);
+    --risk-mid: #f0c36a;
+    --risk-mid-soft: rgba(240, 195, 106, 0.14);
+    --risk-low: #7fd1a8;
+    --risk-low-soft: rgba(127, 209, 168, 0.14);
     /* 主色：稍微降低飽和度，不那麼刺眼 */
     --primary-color: #78C2C4;
     --primary-hover: #A1D9DB;
@@ -997,3 +1010,96 @@ span.badge.bg-danger {
     }
 }
 
+/* =========================================
+   中籤預測
+   ========================================= */
+.admission-badge {
+    font-weight: 600;
+    border: 1px solid currentColor;
+}
+.admission-badge.risk-high { color: var(--risk-high); background: var(--risk-high-soft); }
+.admission-badge.risk-mid  { color: var(--risk-mid);  background: var(--risk-mid-soft); }
+.admission-badge.risk-low  { color: var(--risk-low);  background: var(--risk-low-soft); }
+
+.admission-detail { border-left: 3px solid var(--border-color); padding-left: 0.75rem; }
+.admission-detail.risk-high { border-left-color: var(--risk-high); }
+.admission-detail.risk-mid  { border-left-color: var(--risk-mid); }
+.admission-detail.risk-low  { border-left-color: var(--risk-low); }
+
+.admit-range {
+    position: relative;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--bg-muted);
+}
+.admit-range-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 999px;
+    background: var(--primary-color);
+    opacity: 0.8;
+}
+
+/* =========================================
+   選課助理與大綱問答
+   ========================================= */
+.assistant-log {
+    max-height: 60vh;
+    min-height: 160px;
+    overflow-y: auto;
+    padding: 0.75rem;
+    border: 1px solid var(--border-light);
+    border-radius: var(--border-radius-md);
+    background: var(--bg-muted);
+    color: var(--text-main);
+}
+.assistant-msg { margin-bottom: 0.75rem; }
+.assistant-bubble {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--border-radius-lg);
+    background: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border-light);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.assistant-user { text-align: right; }
+.assistant-user .assistant-bubble {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+    text-align: left;
+}
+.assistant-course { background: var(--bg-card); color: var(--text-main); border-color: var(--border-light) !important; }
+.assistant-course .text-muted,
+.assistant-msg details { color: var(--text-secondary) !important; }
+.assistant-reason { color: var(--text-main); }
+.assistant-msg details summary { cursor: pointer; }
+.assistant-msg details code { overflow-wrap: anywhere; }
+.assistant-example {
+    color: var(--text-secondary);
+    border-color: var(--border-color);
+    text-align: left;
+}
+.assistant-example:hover { color: var(--text-main); background: var(--primary-light); border-color: var(--primary-color); }
+.assistant-cmd {
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--border-radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    color: var(--text-main);
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.syllabus-cite {
+    border-left: 3px solid var(--border-color);
+    padding: 0.25rem 0.5rem;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    font-size: 0.85em;
+}

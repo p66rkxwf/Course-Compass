@@ -8,8 +8,9 @@
 
 輸出結構（預設寫到 web/data/）：
 
-    meta.json              學期清單、已結算學期、歷年中籤率對照表
-    courses/115-1.json     單一學期的課程與該學期的篩選選項（找課頁用）
+    meta.json              學期清單、已結算學期、歷年中籤率對照表、中籤預測模型的驗證摘要
+    courses/115-1.json     單一學期的課程與該學期的篩選選項（找課頁用）；
+                           每門課附 admission_pred（中籤預測，來自 data/models/demand_predictions.csv）
     dashboard/115-1.json   預先算好的統計儀表板
     history.json           全部學期的精簡紀錄（歷年課程頁用，延遲載入）
 
@@ -40,7 +41,14 @@ from api import filters as course_filters  # noqa: E402
 from api.app import (  # noqa: E402
     calculate_historical_stats, clean_course_data, get_settled_semesters,
 )
-from config import PROCESSED_DATA_DIR  # noqa: E402
+from api.predictions import PredictionStore  # noqa: E402
+from config import MODELS_DIR, PROCESSED_DATA_DIR  # noqa: E402
+
+# 放進 meta.json 的模型說明欄位（系統說明視窗顯示驗證成績用）
+PREDICTION_META_KEYS = [
+    "model_version", "trained_at", "frozen_train_semesters", "holdout_semester",
+    "dev_test_semesters", "dev_summary", "holdout",
+]
 
 # 前端實際會用到的欄位。不是整份 CSV 都要送給瀏覽器——教學大綱狀態、上課大樓
 # 這類目前沒有介面用到的欄位省下來，單一學期可以再小一截。
@@ -80,6 +88,18 @@ def records(df: pd.DataFrame, columns) -> list:
     return clean_course_data(df[available].to_dict("records"))
 
 
+def attach_predictions(courses: list, store: PredictionStore) -> int:
+    """把樣本外中籤預測掛到每門課上（admission_pred）；回傳有預測的門數。
+    模型版本放在 meta.json 一次就好，逐門只留數字，控制資料包大小。"""
+    count = 0
+    for course in courses:
+        pred = store.get(course)
+        if pred:
+            course["admission_pred"] = {k: round(pred[k], 3) for k in ("p_full", "est_admit", "admit_lo", "admit_hi")}
+            count += 1
+    return count
+
+
 def build(out_dir: Path) -> None:
     source = latest_processed_file()
     print(f"資料來源：{source.name}")
@@ -91,6 +111,9 @@ def build(out_dir: Path) -> None:
 
     settled = get_settled_semesters(df)
     acceptance = calculate_historical_stats(df)
+    # 只讀預測檔、不現算：建置環境（CI）不裝 scikit-learn。沒有預測的學期就不附
+    predictions = PredictionStore(Path(MODELS_DIR), allow_compute=False)
+    prediction_meta = predictions.meta()
 
     if out_dir.exists():
         shutil.rmtree(out_dir)
@@ -117,6 +140,7 @@ def build(out_dir: Path) -> None:
         # 用 tab 當分隔符才不會有真實字串意外撞到
         "acceptance": {f"{name}	{teacher}": round(rate, 6)
                        for (name, teacher), rate in acceptance.items()},
+        "prediction_model": {k: prediction_meta.get(k) for k in PREDICTION_META_KEYS} if prediction_meta else None,
     }
     size = write_json(out_dir / "meta.json", meta)
     print(f"  meta.json                 gzip {size/1024:>7.1f} KB  "
@@ -127,17 +151,19 @@ def build(out_dir: Path) -> None:
     for entry in semesters:
         year, semester = entry["year"], entry["semester"]
         scoped = course_filters.filter_by_semester(df, year, semester)
+        courses = records(scoped, COURSE_COLUMNS)
+        with_pred = attach_predictions(courses, predictions)
         payload = {
             "year": year,
             "semester": semester,
             "has_results": entry["has_results"],
             "filters": course_filters.build_filter_options(scoped),
-            "courses": records(scoped, COURSE_COLUMNS),
+            "courses": courses,
         }
         size = write_json(out_dir / "courses" / f"{year}-{semester}.json", payload)
         total += size
         print(f"  courses/{year}-{semester}.json         gzip {size/1024:>7.1f} KB  "
-              f"（{len(payload['courses'])} 門）")
+              f"（{len(payload['courses'])} 門，{with_pred} 門附中籤預測）")
 
         dash = dashboard_builder.build_dashboard(df, scoped, settled, year, semester)
         dsize = write_json(out_dir / "dashboard" / f"{year}-{semester}.json", dash)

@@ -170,12 +170,29 @@ python main.py api
 - **缺額監控**：即時查詢名額，可從課表一鍵加入監控清單，支援停留本頁時自動更新
 - **統計儀表板**：學期趨勢、學院／學制／學分分佈、上課時段熱區、搶手與好選課排行
 - **歷年課程**：登記／選上／上限圖表
+- **中籤預測**（AI）：查詢結果與課程詳情顯示爆滿機率、預估中籤率與 80% 區間；
+  預測在建置期寫進靜態資料包，正式網站就看得到
+- **選課助理**、**問大綱**（AI，本機版）：用一句話描述需求、針對課程大綱提問；
+  需要本機的 Ollama，正式網站會顯示本機版說明
 - 學年度與學期選單由 `/api/semesters` 動態產生，新學期上線不必改前端
 - 仍在預選登記中的學期會標示「預選登記中」，並自動排除於中籤率／飽和度統計外
 
 > **為何要排除預選中的學期**：預選登記進行中時「登記人數」仍在累積、「選上人數」尚未公布，
 > 是不完整的快照。若納入計算，中籤率（上限/登記）會偏樂觀、飽和度（登記/上限）會偏低。
 > 判定方式見 `src/api/app.py` 的 `get_settled_semesters()`。
+
+## AI 功能
+
+詳見 [docs/AI_FEATURES.md](docs/AI_FEATURES.md)（方法、驗證數字與限制）。
+
+```bash
+pip install -r requirements.txt -r requirements-ai.txt   # AI 套件與核心分開，CI 不需要
+python main.py train-demand      # 重訓中籤預測 → data/models/、docs/demand_model_report.md
+python main.py predict-demand    # 新學期公告後，用凍結模型補上預測（不重訓）
+python main.py fetch-syllabi     # 下載當學期教學大綱 PDF（data/syllabus/，不進版控）
+python main.py build-index       # 建立大綱索引（需 ollama pull bge-m3；沒有 Ollama 時用離線 mock）
+python scripts/build_static.py && python main.py api   # 本機完整版：http://localhost:8000
+```
 
 ## 資料流程
 
@@ -211,7 +228,9 @@ python main.py api
 python -m unittest discover -s tests -v
 ```
 
-45 項測試，涵蓋篩選層、推薦評分、搜尋排序、儀表板統計與 `/api/courses/query` 的整合行為。
+70 項測試，涵蓋篩選層、推薦評分、搜尋排序、儀表板統計與 `/api/courses/query` 的整合行為，
+以及 AI 功能（`tests/test_ai.py`：中籤預測防洩漏、選課助理防幻覺、大綱切塊）。
+其中 7 項需要 scikit-learn，沒裝 `requirements-ai.txt` 時自動略過（CI 即是如此）。
 多數用手工造的小資料集，不需要先跑爬蟲；少數 smoke 測試會在
 `data/processed/` 有實際資料時才執行。
 

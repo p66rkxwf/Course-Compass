@@ -18,7 +18,10 @@ def main():
     parser = argparse.ArgumentParser(description="Course Master - 智慧選課輔助系統")
     parser.add_argument(
         "command",
-        choices=["crawl", "process", "build-dict", "api", "all"],
+        choices=["crawl", "process", "build-dict", "api", "all",
+                 # AI 功能（需 pip install -r requirements-ai.txt）
+                 "train-demand", "eval-holdout", "predict-demand",
+                 "fetch-syllabi", "build-index", "eval-agent", "eval-rag"],
         help="要執行的命令"
     )
     parser.add_argument(
@@ -33,6 +36,14 @@ def main():
         default=None,
         metavar="N",
         help="爬蟲只抓最後 N 個學期（過去學期資料已凍結，排程更新建議用 --latest 2）"
+    )
+    parser.add_argument(
+        "--semester", metavar="YYY-S",
+        help="fetch-syllabi / build-index：指定學期（預設為資料中最新學期）"
+    )
+    parser.add_argument(
+        "--limit", type=int, default=None,
+        help="fetch-syllabi：最多下載幾份（測試用）"
     )
 
     args = parser.parse_args()
@@ -55,6 +66,34 @@ def main():
     elif args.command == "api":
         from api.app import main as api_main
         api_main()
+
+    elif args.command == "train-demand":
+        from ml.cli import train_main
+        train_main()
+
+    elif args.command == "eval-holdout":
+        from ml.cli import holdout_main
+        holdout_main()
+
+    elif args.command == "predict-demand":
+        from ml.cli import predict_main
+        predict_main()
+
+    elif args.command == "fetch-syllabi":
+        from ai.syllabus import main as syllabus_main
+        syllabus_main(args.semester, args.limit)
+
+    elif args.command == "build-index":
+        from ai.index import main as index_main
+        index_main(args.semester)
+
+    elif args.command == "eval-agent":
+        from ai.evaluate import main as eval_main
+        eval_main()
+
+    elif args.command == "eval-rag":
+        from ai.evaluate import main_rag
+        main_rag()
 
     elif args.command == "all":
         print("開始執行完整流程...")
